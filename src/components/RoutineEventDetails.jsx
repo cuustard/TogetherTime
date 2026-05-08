@@ -1,7 +1,6 @@
 import { Edit3, Lock, Repeat, Trash2, X } from "lucide-react";
 import { STATUS_LABELS, STATUS_STYLES } from "../constants/availability";
 import { DAY_KEYS } from "../constants/timeline";
-import { PEOPLE } from "../data/people";
 import { prettyTimeZone } from "../lib/time";
 import { Card, CardContent } from "./Card";
 import { RoutineEventComposer } from "./RoutineEventComposer";
@@ -33,11 +32,12 @@ export function RoutineEventDetails({
   onCancelEdit,
   onSave,
   onDelete,
+  people,
 }) {
   if (!event) return null;
 
   const canEdit = event.owner === viewer;
-  const owner = PEOPLE[event.owner];
+  const owner = people[event.owner];
   const styleClass = STATUS_STYLES[event.type] || STATUS_STYLES.unknown;
   const homeTimeZone = event.timezone || owner.homeTimeZone;
 
@@ -50,6 +50,7 @@ export function RoutineEventDetails({
           mode="edit"
           onSave={onSave}
           onCancel={onCancelEdit}
+          people={people}
         />
       </div>
     );

@@ -1,7 +1,6 @@
 import { Edit3, Lock, Repeat, Trash2 } from "lucide-react";
 import { STATUS_LABELS } from "../constants/availability";
 import { DAY_KEYS } from "../constants/timeline";
-import { PEOPLE } from "../data/people";
 import { Card, CardContent } from "./Card";
 
 const DAY_LABELS = {
@@ -22,7 +21,7 @@ function formatRepeatDays(days = []) {
   return ordered.map((day) => DAY_LABELS[day]).join(", ");
 }
 
-export function RoutineEventsList({ eventsByPerson, viewer, onSelect, onRemove }) {
+export function RoutineEventsList({ eventsByPerson, viewer, onSelect, onRemove, people }) {
   const routineEvents = [
     ...eventsByPerson.you.map((event) => ({ ...event, owner: "you" })),
     ...eventsByPerson.partner.map((event) => ({ ...event, owner: "partner" })),
@@ -58,7 +57,7 @@ export function RoutineEventsList({ eventsByPerson, viewer, onSelect, onRemove }
                   onClick={() => onSelect(event.owner, event.id)}
                 >
                   <div className="truncate text-sm font-bold text-slate-950">
-                    {PEOPLE[event.owner].emoji} {event.label}
+                    {people[event.owner]?.emoji} {event.label}
                   </div>
                   <div className="text-xs font-semibold text-slate-500">
                     {formatRepeatDays(event.days)} · {event.start}–{event.end} · {STATUS_LABELS[event.type] || event.type}

@@ -1,11 +1,8 @@
 import { memo } from "react";
 import { Heart } from "lucide-react";
-import { PEOPLE } from "../data/people";
 import { formatDayInZone, formatDurationUntil, formatTimeInZone } from "../lib/time";
 
-function OverlapCard({ window, viewerTimeZone, now, isFirst }) {
-  const youTimeZone = PEOPLE.you.homeTimeZone;
-  const partnerTimeZone = PEOPLE.partner.homeTimeZone;
+function OverlapCard({ window, viewerTimeZone, now, isFirst, people }) {
   const startsInLabel = formatDurationUntil(window.startDate, now);
 
   return (
@@ -32,17 +29,17 @@ function OverlapCard({ window, viewerTimeZone, now, isFirst }) {
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-xl bg-slate-50 p-2">
-          <div className="font-semibold text-slate-500">UK time</div>
+          <div className="font-semibold text-slate-500">{people.you.name}'s time</div>
           <div className="font-bold text-slate-950">
-            {formatTimeInZone(window.startDate, youTimeZone)}–
-            {formatTimeInZone(window.endDate, youTimeZone)}
+            {formatTimeInZone(window.startDate, people.you.homeTimeZone)}–
+            {formatTimeInZone(window.endDate, people.you.homeTimeZone)}
           </div>
         </div>
         <div className="rounded-xl bg-slate-50 p-2">
-          <div className="font-semibold text-slate-500">Brisbane time</div>
+          <div className="font-semibold text-slate-500">{people.partner.name}'s time</div>
           <div className="font-bold text-slate-950">
-            {formatTimeInZone(window.startDate, partnerTimeZone)}–
-            {formatTimeInZone(window.endDate, partnerTimeZone)}
+            {formatTimeInZone(window.startDate, people.partner.homeTimeZone)}–
+            {formatTimeInZone(window.endDate, people.partner.homeTimeZone)}
           </div>
         </div>
       </div>

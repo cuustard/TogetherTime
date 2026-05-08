@@ -1,5 +1,4 @@
 import { Edit3, Lock, Trash2 } from "lucide-react";
-import { PEOPLE } from "../data/people";
 import { formatDateTimeForEventList, formatTimeInZone } from "../lib/time";
 import { Card, CardContent } from "./Card";
 
@@ -10,6 +9,7 @@ export function UpcomingOneOffEvents({
   now,
   onSelect,
   onRemove,
+  people,
 }) {
   const nowMs = now?.getTime?.() ?? Date.now();
   const oneOffEvents = [
@@ -45,7 +45,7 @@ export function UpcomingOneOffEvents({
                     onClick={() => onSelect(event.owner, event.id)}
                   >
                     <div className="truncate text-sm font-bold text-slate-950">
-                      {PEOPLE[event.owner].emoji} {event.label}
+                      {people[event.owner]?.emoji} {event.label}
                     </div>
                     <div className="text-xs font-semibold text-slate-500">
                       {formatDateTimeForEventList(new Date(event.startAt), viewerTimeZone)}–

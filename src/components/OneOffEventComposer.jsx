@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
-import { PEOPLE } from "../data/people";
 import { oneOffEventToForm, oneOffFormToEvent } from "../lib/events";
 import { getDateInputValue, prettyTimeZone } from "../lib/time";
 import { Card, CardContent } from "./Card";
@@ -17,12 +16,14 @@ export function OneOffEventComposer({
   onCancel,
   initialEvent = null,
   mode = "add",
+  people,
 }) {
   const isEditing = mode === "edit" && initialEvent;
+  const viewerPerson = people[viewer];
   const initialForm = useMemo(() => {
-    if (isEditing) return oneOffEventToForm(initialEvent);
+    if (isEditing) return oneOffEventToForm(initialEvent, people);
 
-    const todayForViewer = getDateInputValue(now, PEOPLE[viewer].homeTimeZone);
+    const todayForViewer = getDateInputValue(now, viewerPerson.homeTimeZone);
     return {
       owner: viewer,
       title: "",
@@ -32,7 +33,7 @@ export function OneOffEventComposer({
       endDate: todayForViewer,
       endTime: "19:00",
     };
-  }, [initialEvent, isEditing, now, viewer]);
+  }, [initialEvent, isEditing, now, viewer, viewerPerson.homeTimeZone, people]);
 
   const [owner, setOwner] = useState(viewer);
   const [title, setTitle] = useState(initialForm.title);
@@ -78,6 +79,7 @@ export function OneOffEventComposer({
       endDate,
       endTime,
       createdAt: initialEvent?.createdAt,
+      people,
     });
 
     if (new Date(nextEvent.endAt) <= new Date(nextEvent.startAt)) {
@@ -105,8 +107,8 @@ export function OneOffEventComposer({
             </div>
             <div className="mt-1 text-xs text-slate-500">
               {isEditing
-                ? `Editing as ${PEOPLE[viewer].name}. You can only change your own events.`
-                : `Adding as ${PEOPLE[viewer].name}. One-off events happen once at an exact time.`}
+                ? `Editing as ${viewerPerson.name}. You can only change your own events.`
+                : `Adding as ${viewerPerson.name}. One-off events happen once at an exact time.`}
             </div>
           </div>
 
@@ -142,8 +144,7 @@ export function OneOffEventComposer({
                 onChange={(event) => setOwner(event.target.value)}
                 disabled
               >
-                <option value="you">Jake</option>
-                <option value="partner">Amy</option>
+                <option value="you">{viewerPerson.name}</option>
               </select>
             </label>
 
@@ -211,7 +212,7 @@ export function OneOffEventComposer({
           </div>
 
           <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-            Times are entered in {PEOPLE[viewer].name}'s home timezone: {prettyTimeZone(PEOPLE[viewer].homeTimeZone)}. For overnight events, set the end date to the next day.
+            Times are entered in {viewerPerson.name}'s home timezone: {prettyTimeZone(viewerPerson.homeTimeZone)}. For overnight events, set the end date to the next day.
           </div>
 
           {error && (

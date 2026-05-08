@@ -2,7 +2,7 @@ import { Clock, Moon, Sun, UserRound } from "lucide-react";
 import { formatTimeInZone } from "../lib/time";
 import { MemoTimelineBlock } from "./TimelineBlock";
 
-function DayDivider({ divider, variant }) {
+function DayDivider({ divider, variant, label }) {
   const isHer = variant === "her";
   return (
     <div
@@ -17,7 +17,7 @@ function DayDivider({ divider, variant }) {
       >
         <div className="whitespace-nowrap">{divider.label}</div>
         <div className="mt-0.5 text-[10px] font-medium text-slate-400">
-          {isHer ? "Her" : "You"}
+          {label}
         </div>
       </div>
       <div className="h-px flex-1 bg-slate-200" />
@@ -37,6 +37,8 @@ export function Timeline({
   otherTimeLabel,
   nowTop,
   onSelectEvent,
+  people,
+  hasPartner,
 }) {
   return (
     <section className="space-y-3 pb-10">
@@ -53,10 +55,10 @@ export function Timeline({
         <div className="grid grid-cols-[54px_1fr_1fr_54px] border-b border-slate-100 bg-slate-50 px-2 py-3 text-xs font-bold text-slate-500">
           <div>Time</div>
           <div className="flex items-center justify-center gap-1 text-center">
-            <UserRound className="h-3 w-3" /> You
+            <UserRound className="h-3 w-3" /> {people.you.name}
           </div>
           <div className="flex items-center justify-center gap-1 text-center">
-            <UserRound className="h-3 w-3" /> Her
+            <UserRound className="h-3 w-3" /> {hasPartner ? people.partner.name : "Partner"}
           </div>
           <div className="text-right">{otherTimeLabel}</div>
         </div>
@@ -94,6 +96,7 @@ export function Timeline({
                   key={`${block.startUtc.getTime()}-${block.endUtc.getTime()}-${block.type}`}
                   block={block}
                   onSelectEvent={onSelectEvent}
+                  people={people}
                 />
               ))}
               {dayDividers
@@ -103,6 +106,7 @@ export function Timeline({
                     key={`${divider.date.getTime()}-${divider.owner}`}
                     divider={divider}
                     variant="you"
+                    label={people.you.name}
                   />
                 ))}
             </div>
@@ -120,6 +124,7 @@ export function Timeline({
                   key={`${block.startUtc.getTime()}-${block.endUtc.getTime()}-${block.type}`}
                   block={block}
                   onSelectEvent={onSelectEvent}
+                  people={people}
                 />
               ))}
               {dayDividers
@@ -129,6 +134,7 @@ export function Timeline({
                     key={`${divider.date.getTime()}-${divider.owner}`}
                     divider={divider}
                     variant="her"
+                    label={hasPartner ? people.partner.name : "Partner"}
                   />
                 ))}
             </div>

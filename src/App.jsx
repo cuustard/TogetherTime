@@ -10,7 +10,6 @@ import { MemoOverlapCard } from "./components/OverlapCard";
 import { MemoCombinedPersonStatus } from "./components/StatusCards";
 import { Timeline } from "./components/Timeline";
 import { UpcomingOneOffEvents } from "./components/UpcomingOneOffEvents";
-import { PEOPLE } from "./data/people";
 import {
   buildDayDividers,
   buildHourMarkers,
@@ -19,7 +18,6 @@ import {
   getStatusAt,
   getTimelineBounds,
 } from "./lib/events";
-import { loadEventsFromStorage, resetEventsInStorage, saveEventsToStorage } from "./lib/storage";
 import {
   formatOffsetLabel,
   formatTimeInZone,
@@ -30,6 +28,15 @@ import {
 import { supabase } from "./lib/supabase";
 import { fetchProfile } from "./lib/profiles";
 import { fetchUserTimeline } from "./lib/timelines";
+import { fetchTimelineMembers } from "./lib/timelineMembers";
+import { buildPeopleFromTimelineMembers } from "./lib/people";
+import {
+  createEmptyEventsByPerson,
+  createTimelineEvent,
+  deleteTimelineEvent,
+  fetchTimelineEvents,
+  updateTimelineEvent,
+} from "./lib/sharedEvents";
 import AuthScreen from "./components/AuthScreen";
 import ProfileOnboarding from "./components/ProfileOnboarding";
 import TimelineOnboarding from "./components/TimelineOnboarding";
@@ -44,7 +51,7 @@ import TimelineOnboarding from "./components/TimelineOnboarding";
 export default function TogetherTimeApp() {
   const [localTimeZone, setLocalTimeZone] = useState(getLocalTimeZone);
   const [now, setNow] = useState(() => new Date());
-  const [eventsByPerson, setEventsByPerson] = useState(loadEventsFromStorage);
+  const [eventsByPerson, setEventsByPerson] = useState(createEmptyEventsByPerson);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [editingEventId, setEditingEventId] = useState(null);
   const [composerKind, setComposerKind] = useState("one_off");
@@ -56,18 +63,24 @@ export default function TogetherTimeApp() {
   const [sharedTimeline, setSharedTimeline] = useState(null);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState("");
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState("");
+  const [timelineMembers, setTimelineMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState("");
   const timelineScrollRef = useRef(null);
 
-  const viewerFromUrl = new URLSearchParams(window.location.search)
-    .get("me")
-    ?.toLowerCase();
-
-  const viewer = viewerFromUrl === "amy" ? "partner" : "you";
-  const viewerName = viewer === "partner" ? "Amy" : "Jake";
+  const viewer = "you";
   const viewerTimeZone = localTimeZone;
-  const otherPersonKey = viewer === "you" ? "partner" : "you";
-  const otherTimeZone = PEOPLE[otherPersonKey].homeTimeZone;
-  const otherTimeLabel = viewer === "you" ? "Her time" : "Your time";
+  const otherPersonKey = "partner";
+
+  const people = useMemo(
+    () => buildPeopleFromTimelineMembers({ profile, members: timelineMembers }),
+    [profile, timelineMembers],
+  );
+  const hasPartner = Boolean(people.partner.userId);
+  const otherTimeZone = people.partner.homeTimeZone;
+  const otherTimeLabel = hasPartner ? `${people.partner.name}'s time` : "Partner time";
 
   useEffect(() => {
     let isMounted = true;
@@ -160,6 +173,80 @@ export default function TogetherTimeApp() {
   }, [session?.user?.id, profile]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    if (!sharedTimeline?.id) {
+      setTimelineMembers([]);
+      setMembersLoading(false);
+      setMembersError("");
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    setMembersLoading(true);
+    setMembersError("");
+
+    fetchTimelineMembers(sharedTimeline.id)
+      .then((members) => {
+        if (!isMounted) return;
+        setTimelineMembers(members);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setMembersError(error.message || "Could not load timeline members.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setMembersLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sharedTimeline?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!sharedTimeline?.id || !session?.user?.id || membersLoading || membersError) {
+      setEventsByPerson(createEmptyEventsByPerson());
+      setEventsLoading(false);
+      setEventsError("");
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    setEventsLoading(true);
+    setEventsError("");
+
+    fetchTimelineEvents({
+      timelineId: sharedTimeline.id,
+      currentUserId: session.user.id,
+      viewerKey: viewer,
+      otherPersonKey,
+      people,
+    })
+      .then((nextEvents) => {
+        if (!isMounted) return;
+        setEventsByPerson(nextEvents);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setEventsError(error.message || "Could not load shared events.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setEventsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sharedTimeline?.id, session?.user?.id, viewer, otherPersonKey, people, membersLoading, membersError]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       setNow(new Date());
 
@@ -172,17 +259,72 @@ export default function TogetherTimeApp() {
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    saveEventsToStorage(eventsByPerson);
-  }, [eventsByPerson]);
 
-  function addEvent(event) {
-    if (event.owner !== viewer) return;
+  function replaceEventInState(previousOwner, nextEvent) {
+    setEventsByPerson((currentEvents) => {
+      const withoutOldEvent = (currentEvents[previousOwner] || []).filter(
+        (event) => event.id !== nextEvent.id,
+      );
 
-    setEventsByPerson((currentEvents) => ({
-      ...currentEvents,
-      [event.owner]: [...(currentEvents[event.owner] || []), event],
-    }));
+      const nextOwnerEvents =
+        previousOwner === nextEvent.owner
+          ? withoutOldEvent
+          : (currentEvents[nextEvent.owner] || []).filter(
+              (event) => event.id !== nextEvent.id,
+            );
+
+      return {
+        ...currentEvents,
+        [previousOwner]: withoutOldEvent,
+        [nextEvent.owner]: [...nextOwnerEvents, nextEvent],
+      };
+    });
+  }
+
+  async function refreshSharedEvents() {
+    if (!sharedTimeline?.id || !session?.user?.id) return;
+
+    setEventsLoading(true);
+    setEventsError("");
+
+    try {
+      const nextEvents = await fetchTimelineEvents({
+        timelineId: sharedTimeline.id,
+        currentUserId: session.user.id,
+        viewerKey: viewer,
+        otherPersonKey,
+        people,
+      });
+
+      setEventsByPerson(nextEvents);
+    } catch (error) {
+      setEventsError(error.message || "Could not load shared events.");
+    } finally {
+      setEventsLoading(false);
+    }
+  }
+
+  async function addEvent(event) {
+    if (event.owner !== viewer || !sharedTimeline?.id || !session?.user?.id) return;
+
+    setEventsError("");
+
+    try {
+      const savedEvent = await createTimelineEvent({
+        event,
+        timelineId: sharedTimeline.id,
+        userId: session.user.id,
+        viewerKey: viewer,
+        people,
+      });
+
+      setEventsByPerson((currentEvents) => ({
+        ...currentEvents,
+        [savedEvent.owner]: [...(currentEvents[savedEvent.owner] || []), savedEvent],
+      }));
+    } catch (error) {
+      setEventsError(error.message || "Could not save that event.");
+    }
   }
 
   function selectEvent(owner, eventId, kind) {
@@ -190,51 +332,54 @@ export default function TogetherTimeApp() {
     setEditingEventId(null);
   }
 
-  function updateEvent(previousOwner, nextEvent) {
+  async function updateEvent(previousOwner, nextEvent) {
     if (previousOwner !== viewer || nextEvent.owner !== viewer) return;
 
-    setEventsByPerson((currentEvents) => {
-      const withoutOldEvent = (currentEvents[previousOwner] || []).filter(
-        (event) => event.id !== nextEvent.id,
-      );
+    setEventsError("");
 
-      return {
-        ...currentEvents,
-        [previousOwner]: [...withoutOldEvent, nextEvent],
-      };
-    });
+    try {
+      const savedEvent = await updateTimelineEvent({
+        event: nextEvent,
+        viewerKey: viewer,
+        people,
+      });
 
-    setSelectedEvent({ owner: nextEvent.owner, eventId: nextEvent.id, kind: nextEvent.kind });
-    setEditingEventId(null);
+      replaceEventInState(previousOwner, savedEvent);
+      setSelectedEvent({
+        owner: savedEvent.owner,
+        eventId: savedEvent.id,
+        kind: savedEvent.kind,
+      });
+      setEditingEventId(null);
+    } catch (error) {
+      setEventsError(error.message || "Could not update that event.");
+    }
   }
 
-  function removeEvent(owner, eventId) {
+  async function removeEvent(owner, eventId) {
     if (owner !== viewer) return;
 
-    setEventsByPerson((currentEvents) => ({
-      ...currentEvents,
-      [owner]: (currentEvents[owner] || []).filter((event) => event.id !== eventId),
-    }));
+    setEventsError("");
 
-    setSelectedEvent((currentSelection) =>
-      currentSelection?.owner === owner && currentSelection?.eventId === eventId
-        ? null
-        : currentSelection,
-    );
-    setEditingEventId((currentEventId) =>
-      currentEventId === eventId ? null : currentEventId,
-    );
-  }
+    try {
+      await deleteTimelineEvent(eventId);
 
-  function resetDemoData() {
-    if (!window.confirm("Reset local demo data? This restores the default recurring schedules and clears custom events on this device.")) {
-      return;
+      setEventsByPerson((currentEvents) => ({
+        ...currentEvents,
+        [owner]: (currentEvents[owner] || []).filter((event) => event.id !== eventId),
+      }));
+
+      setSelectedEvent((currentSelection) =>
+        currentSelection?.owner === owner && currentSelection?.eventId === eventId
+          ? null
+          : currentSelection,
+      );
+      setEditingEventId((currentEventId) =>
+        currentEventId === eventId ? null : currentEventId,
+      );
+    } catch (error) {
+      setEventsError(error.message || "Could not delete that event.");
     }
-
-    setEventsByPerson(resetEventsInStorage());
-    setSelectedEvent(null);
-    setEditingEventId(null);
-    setComposerKind("one_off");
   }
 
   const timeline = useMemo(
@@ -250,8 +395,9 @@ export default function TogetherTimeApp() {
         timeline.endUtc,
         timeline.totalHeight,
         eventsByPerson,
+        people,
       ),
-    [timeline.startUtc, timeline.endUtc, timeline.totalHeight, eventsByPerson],
+    [timeline.startUtc, timeline.endUtc, timeline.totalHeight, eventsByPerson, people],
   );
 
   const partnerBlocks = useMemo(
@@ -262,13 +408,14 @@ export default function TogetherTimeApp() {
         timeline.endUtc,
         timeline.totalHeight,
         eventsByPerson,
+        people,
       ),
-    [timeline.startUtc, timeline.endUtc, timeline.totalHeight, eventsByPerson],
+    [timeline.startUtc, timeline.endUtc, timeline.totalHeight, eventsByPerson, people],
   );
 
   const overlapWindows = useMemo(
-    () => findOverlapWindows(timeline.startUtc, timeline.endUtc, now, eventsByPerson),
-    [timeline.startUtc, timeline.endUtc, now, eventsByPerson],
+    () => hasPartner ? findOverlapWindows(timeline.startUtc, timeline.endUtc, now, eventsByPerson, people) : [],
+    [timeline.startUtc, timeline.endUtc, now, eventsByPerson, people, hasPartner],
   );
 
   const nextWindows = overlapWindows
@@ -276,23 +423,19 @@ export default function TogetherTimeApp() {
     .slice(0, 3);
 
   const currentYou = useMemo(
-    () => getStatusAt("you", now, eventsByPerson),
-    [now, eventsByPerson],
+    () => getStatusAt("you", now, eventsByPerson, people),
+    [now, eventsByPerson, people],
   );
 
   const currentPartner = useMemo(
-    () => getStatusAt("partner", now, eventsByPerson),
-    [now, eventsByPerson],
+    () => hasPartner ? getStatusAt("partner", now, eventsByPerson, people) : { type: "unknown", label: "Not joined" },
+    [now, eventsByPerson, people, hasPartner],
   );
 
   const baseDifferenceMinutes =
-    getTimeZoneOffsetMinutes(now, PEOPLE.partner.homeTimeZone) -
-    getTimeZoneOffsetMinutes(now, PEOPLE.you.homeTimeZone);
-  const viewerRelativeDifferenceMinutes =
-    viewer === "you" ? baseDifferenceMinutes : -baseDifferenceMinutes;
-  const timeDifferenceLabel = formatOffsetLabel(
-    viewerRelativeDifferenceMinutes,
-  );
+    getTimeZoneOffsetMinutes(now, people.partner.homeTimeZone) -
+    getTimeZoneOffsetMinutes(now, people.you.homeTimeZone);
+  const timeDifferenceLabel = formatOffsetLabel(baseDifferenceMinutes);
 
   const nowTop = Math.max(
     0,
@@ -465,6 +608,51 @@ export default function TogetherTimeApp() {
     );
   }
 
+  if (membersLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-pink-50 px-4 text-center text-sm font-bold text-slate-500">
+        Loading timeline members...
+      </main>
+    );
+  }
+
+  if (membersError) {
+    return (
+      <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-8 text-slate-950">
+        <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center">
+          <section className="w-full rounded-[2rem] border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
+            <div className="flex items-center gap-2 text-sm font-semibold text-pink-700">
+              <Heart className="h-4 w-4 fill-pink-200" />
+              Together Time
+            </div>
+            <h1 className="mt-4 text-2xl font-black tracking-tight">
+              Could not load timeline members
+            </h1>
+            <p className="mt-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {membersError}
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                className="rounded-2xl bg-pink-600 px-4 py-3 text-sm font-black text-white"
+                type="button"
+                onClick={() => window.location.reload()}
+              >
+                Try again
+              </button>
+              <button
+                className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-600"
+                type="button"
+                onClick={() => supabase.auth.signOut()}
+              >
+                Sign out
+              </button>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-5 text-slate-950">
       <div className="mx-auto max-w-md space-y-5">
@@ -481,7 +669,7 @@ export default function TogetherTimeApp() {
               </h1>
 
               <div className="mt-1 text-xs text-slate-500">
-                Signed in as {profile.display_name} · {sharedTimeline.name} · demo view as {viewerName}
+                Signed in as {profile.display_name} · {sharedTimeline.name}
               </div>
               <div className="mt-1 text-xs font-bold text-pink-700">
                 Invite code: {sharedTimeline.invite_code}
@@ -510,11 +698,14 @@ export default function TogetherTimeApp() {
         <section className="grid grid-cols-1 gap-3">
           <MemoCombinedPersonStatus
             you={currentYou}
-            youTime={formatTimeInZone(now, PEOPLE.you.homeTimeZone)}
+            youTime={formatTimeInZone(now, people.you.homeTimeZone)}
             partner={currentPartner}
-            partnerTime={formatTimeInZone(now, PEOPLE.partner.homeTimeZone)}
+            partnerTime={hasPartner ? formatTimeInZone(now, people.partner.homeTimeZone) : "—"}
             viewer={viewer}
             timeDifferenceLabel={timeDifferenceLabel}
+            people={people}
+            hasPartner={hasPartner}
+            inviteCode={sharedTimeline.invite_code}
           />
         </section>
 
@@ -530,13 +721,15 @@ export default function TogetherTimeApp() {
                 viewerTimeZone={viewerTimeZone}
                 now={now}
                 isFirst={index === 0}
+                people={people}
               />
             ))
           ) : (
             <Card className="rounded-2xl border-0 bg-white shadow-sm">
               <CardContent className="p-4 text-sm text-slate-600">
-                No good call windows in the visible timeline. Adjust the
-                timetable or increase the range.
+                {hasPartner
+                  ? "No good call windows in the visible timeline. Adjust the timetable or increase the range."
+                  : `Invite your partner with code ${sharedTimeline.invite_code} to start finding shared call windows.`}
               </CardContent>
             </Card>
           )}
@@ -571,15 +764,31 @@ export default function TogetherTimeApp() {
               </div>
 
               <div className="rounded-2xl bg-pink-50 px-3 py-2 text-xs font-semibold text-pink-800">
-                Events are locked to {PEOPLE[viewer].name} in this local prototype. The other person’s events are view-only.
+                Events are saved to your shared timeline as {people.you.name}. You can edit only events created by your account.
               </div>
             </CardContent>
           </Card>
 
+          {eventsLoading && (
+            <Card className="rounded-2xl border-0 bg-white shadow-sm">
+              <CardContent className="p-4 text-sm font-semibold text-slate-500">
+                Loading shared events...
+              </CardContent>
+            </Card>
+          )}
+
+          {eventsError && (
+            <Card className="rounded-2xl border-0 bg-red-50 shadow-sm">
+              <CardContent className="p-4 text-sm font-semibold text-red-700">
+                {eventsError}
+              </CardContent>
+            </Card>
+          )}
+
           {composerKind === "one_off" ? (
-            <OneOffEventComposer viewer={viewer} now={now} onAdd={addEvent} />
+            <OneOffEventComposer viewer={viewer} now={now} onAdd={addEvent} people={people} />
           ) : (
-            <RoutineEventComposer viewer={viewer} onAdd={addEvent} />
+            <RoutineEventComposer viewer={viewer} onAdd={addEvent} people={people} />
           )}
 
           <UpcomingOneOffEvents
@@ -589,28 +798,31 @@ export default function TogetherTimeApp() {
             now={now}
             onSelect={(owner, eventId) => selectEvent(owner, eventId, "one_off")}
             onRemove={removeEvent}
+            people={people}
           />
           <RoutineEventsList
             eventsByPerson={eventsByPerson}
             viewer={viewer}
             onSelect={(owner, eventId) => selectEvent(owner, eventId, "routine")}
             onRemove={removeEvent}
+            people={people}
           />
 
           <Card className="rounded-2xl border-0 bg-white shadow-sm">
             <CardContent className="flex items-center justify-between gap-3 p-4">
               <div>
-                <div className="text-sm font-bold text-slate-800">Local demo data</div>
+                <div className="text-sm font-bold text-slate-800">Shared timeline events</div>
                 <div className="mt-1 text-xs text-slate-500">
-                  Reset this device back to the default schedules.
+                  Events are loaded from Supabase for everyone in this timeline.
                 </div>
               </div>
               <button
-                className="flex shrink-0 items-center gap-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600 active:scale-95"
+                className="flex shrink-0 items-center gap-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600 active:scale-95 disabled:opacity-60"
                 type="button"
-                onClick={resetDemoData}
+                onClick={refreshSharedEvents}
+                disabled={eventsLoading}
               >
-                <RefreshCcw className="h-3.5 w-3.5" /> Reset
+                <RefreshCcw className="h-3.5 w-3.5" /> Refresh
               </button>
             </CardContent>
           </Card>
@@ -628,6 +840,8 @@ export default function TogetherTimeApp() {
           otherTimeLabel={otherTimeLabel}
           nowTop={nowTop}
           onSelectEvent={selectEvent}
+          people={people}
+          hasPartner={hasPartner}
         />
 
         <OneOffEventDetails
@@ -644,6 +858,7 @@ export default function TogetherTimeApp() {
           onCancelEdit={() => setEditingEventId(null)}
           onSave={updateEvent}
           onDelete={removeEvent}
+          people={people}
         />
 
         <RoutineEventDetails
@@ -658,6 +873,7 @@ export default function TogetherTimeApp() {
           onCancelEdit={() => setEditingEventId(null)}
           onSave={updateEvent}
           onDelete={removeEvent}
+          people={people}
         />
       </div>
     </main>

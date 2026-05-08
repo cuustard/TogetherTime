@@ -1,6 +1,5 @@
 import { Edit3, Lock, Trash2, X } from "lucide-react";
 import { STATUS_LABELS, STATUS_STYLES } from "../constants/availability";
-import { PEOPLE } from "../data/people";
 import {
   formatDateTimeForEventList,
   formatTimeInZone,
@@ -20,11 +19,12 @@ export function OneOffEventDetails({
   onCancelEdit,
   onSave,
   onDelete,
+  people,
 }) {
   if (!event) return null;
 
   const canEdit = event.owner === viewer;
-  const owner = PEOPLE[event.owner];
+  const owner = people[event.owner];
   const styleClass = STATUS_STYLES[event.type] || STATUS_STYLES.unknown;
   const homeTimeZone = event.timezone || owner.homeTimeZone;
   const start = new Date(event.startAt);
@@ -40,6 +40,7 @@ export function OneOffEventDetails({
           mode="edit"
           onSave={onSave}
           onCancel={onCancelEdit}
+          people={people}
         />
       </div>
     );

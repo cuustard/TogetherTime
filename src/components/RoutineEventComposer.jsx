@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Repeat, X } from "lucide-react";
 import { STATUS_LABELS } from "../constants/availability";
 import { DAY_KEYS } from "../constants/timeline";
-import { PEOPLE } from "../data/people";
 import { routineEventToForm, routineFormToEvent } from "../lib/events";
 import { prettyTimeZone } from "../lib/time";
 import { Card, CardContent } from "./Card";
@@ -24,8 +23,10 @@ export function RoutineEventComposer({
   onCancel,
   initialEvent = null,
   mode = "add",
+  people,
 }) {
   const isEditing = mode === "edit" && initialEvent;
+  const viewerPerson = people[viewer];
   const initialForm = useMemo(() => {
     if (isEditing) return routineEventToForm(initialEvent);
 
@@ -98,6 +99,7 @@ export function RoutineEventComposer({
       startTime,
       endTime,
       createdAt: initialEvent?.createdAt,
+      people,
     });
 
     if (isEditing) {
@@ -120,8 +122,8 @@ export function RoutineEventComposer({
             </div>
             <div className="mt-1 text-xs text-slate-500">
               {isEditing
-                ? `Editing as ${PEOPLE[viewer].name}. You can only change your own recurring events.`
-                : `Adding as ${PEOPLE[viewer].name}. Repeats weekly and is stored locally for now.`}
+                ? `Editing as ${viewerPerson.name}. You can only change your own recurring events.`
+                : `Adding as ${viewerPerson.name}. Repeats weekly and is saved to your shared timeline.`}
             </div>
           </div>
 
@@ -157,8 +159,7 @@ export function RoutineEventComposer({
                 onChange={(event) => setOwner(event.target.value)}
                 disabled
               >
-                <option value="you">Jake</option>
-                <option value="partner">Amy</option>
+                <option value="you">{viewerPerson.name}</option>
               </select>
             </label>
 
@@ -224,7 +225,7 @@ export function RoutineEventComposer({
           </div>
 
           <div className="text-xs text-slate-500">
-            Times are entered in {PEOPLE[owner].name}'s home timezone: {prettyTimeZone(PEOPLE[owner].homeTimeZone)}. If the end time is earlier than the start time, it flows overnight.
+            Times are entered in {viewerPerson.name}'s home timezone: {prettyTimeZone(viewerPerson.homeTimeZone)}. If the end time is earlier than the start time, it flows overnight.
           </div>
 
           {error && (

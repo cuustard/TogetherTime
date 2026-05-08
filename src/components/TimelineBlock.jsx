@@ -1,9 +1,8 @@
 import { memo } from "react";
 import { STATUS_LABELS, STATUS_STYLES } from "../constants/availability";
-import { PEOPLE } from "../data/people";
 import { formatTimeInZone } from "../lib/time";
 
-function TimelineBlock({ block, onSelectEvent }) {
+function TimelineBlock({ block, onSelectEvent, people }) {
   const minHeight = Math.max(block.height, 26);
   const styleClass = STATUS_STYLES[block.type] || STATUS_STYLES.unknown;
   const showStatusLine =
@@ -17,7 +16,7 @@ function TimelineBlock({ block, onSelectEvent }) {
         block.type === "sleep" ? "isolate" : ""
       } ${isSelectableEvent ? "cursor-pointer ring-pink-300/0 active:scale-[0.99]" : "cursor-default"}`}
       style={{ top: block.top, height: minHeight }}
-      title={`${block.label}: ${formatTimeInZone(block.startUtc, block.timezone || PEOPLE.you.homeTimeZone)}–${formatTimeInZone(block.endUtc, block.timezone || PEOPLE.you.homeTimeZone)}`}
+      title={`${block.label}: ${formatTimeInZone(block.startUtc, block.timezone || people?.[block.owner]?.homeTimeZone || "UTC")}–${formatTimeInZone(block.endUtc, block.timezone || people?.[block.owner]?.homeTimeZone || "UTC")}`}
       type="button"
       onClick={() => {
         if (isSelectableEvent) onSelectEvent(block.owner, block.id, block.kind);

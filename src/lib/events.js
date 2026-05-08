@@ -141,8 +141,8 @@ function getDayKeyFromDateParts(parts) {
   return DAY_KEYS[date.getUTCDay()];
 }
 
-function recurringEventToUtcInterval(personKey, event, startDateParts) {
-  const eventTimeZone = event.timezone || PEOPLE[personKey].homeTimeZone;
+function recurringEventToUtcInterval(personKey, event, startDateParts, people = PEOPLE) {
+  const eventTimeZone = event.timezone || people[personKey]?.homeTimeZone || PEOPLE[personKey].homeTimeZone;
   const startMinutes = minutesFromTime(event.start);
   const endMinutes = minutesFromTime(event.end);
   const endsNextDay = endMinutes <= startMinutes;
@@ -201,9 +201,10 @@ export function generateScheduleIntervals(
   rangeStartUtc,
   rangeEndUtc,
   eventsByPerson = DEFAULT_EVENTS,
+  people = PEOPLE,
 ) {
   const personEvents = eventsByPerson[personKey] || [];
-  const personTimeZone = PEOPLE[personKey].homeTimeZone;
+  const personTimeZone = people[personKey]?.homeTimeZone || PEOPLE[personKey].homeTimeZone;
   const startParts = getPartsInTimeZone(rangeStartUtc, personTimeZone);
   const totalDays =
     Math.ceil((rangeEndUtc.getTime() - rangeStartUtc.getTime()) / MS_PER_DAY) +
@@ -219,7 +220,7 @@ export function generateScheduleIntervals(
       .forEach((event) => {
         if (!event.days.includes(dayKey)) return;
 
-        const interval = recurringEventToUtcInterval(personKey, event, dateParts);
+        const interval = recurringEventToUtcInterval(personKey, event, dateParts, people);
         if (interval.endUtc > rangeStartUtc && interval.startUtc < rangeEndUtc) {
           intervals.push(interval);
         }
@@ -250,6 +251,7 @@ export function buildVisibleBlocks(
   rangeEndUtc,
   totalHeight,
   eventsByPerson = DEFAULT_EVENTS,
+  people = PEOPLE,
 ) {
   const intervals = resolveOverlappingIntervals(
     generateScheduleIntervals(
@@ -257,6 +259,7 @@ export function buildVisibleBlocks(
       rangeStartUtc,
       rangeEndUtc,
       eventsByPerson,
+      people,
     ),
     rangeStartUtc,
     rangeEndUtc,
@@ -286,7 +289,7 @@ export function buildVisibleBlocks(
   });
 }
 
-export function getStatusAt(personKey, date, eventsByPerson = DEFAULT_EVENTS) {
+export function getStatusAt(personKey, date, eventsByPerson = DEFAULT_EVENTS, people = PEOPLE) {
   const rangeStartUtc = new Date(date.getTime() - MS_PER_DAY * 2);
   const rangeEndUtc = new Date(date.getTime() + MS_PER_DAY * 2);
   const intervals = resolveOverlappingIntervals(
@@ -295,6 +298,7 @@ export function getStatusAt(personKey, date, eventsByPerson = DEFAULT_EVENTS) {
       rangeStartUtc,
       rangeEndUtc,
       eventsByPerson,
+      people,
     ),
     rangeStartUtc,
     rangeEndUtc,
@@ -304,7 +308,7 @@ export function getStatusAt(personKey, date, eventsByPerson = DEFAULT_EVENTS) {
   return event || { type: "unknown", label: "Unknown" };
 }
 
-export function findOverlapWindows(rangeStartUtc, rangeEndUtc, now, eventsByPerson) {
+export function findOverlapWindows(rangeStartUtc, rangeEndUtc, now, eventsByPerson, people = PEOPLE) {
   const stepMs = 15 * 60 * 1000;
   const windows = [];
   let current = null;
@@ -312,8 +316,8 @@ export function findOverlapWindows(rangeStartUtc, rangeEndUtc, now, eventsByPers
 
   for (let t = start; t < rangeEndUtc.getTime(); t += stepMs) {
     const date = new Date(t);
-    const you = getStatusAt("you", date, eventsByPerson);
-    const partner = getStatusAt("partner", date, eventsByPerson);
+    const you = getStatusAt("you", date, eventsByPerson, people);
+    const partner = getStatusAt("partner", date, eventsByPerson, people);
     const isGood =
       ["free", "maybe"].includes(you.type) &&
       ["free", "maybe"].includes(partner.type);
@@ -361,8 +365,9 @@ export function oneOffFormToEvent({
   endDate,
   endTime,
   createdAt,
+  people = PEOPLE,
 }) {
-  const timezone = PEOPLE[owner].homeTimeZone;
+  const timezone = people[owner]?.homeTimeZone || PEOPLE[owner].homeTimeZone;
   const [startYear, startMonth, startDay] = startDate.split("-").map(Number);
   const [endYear, endMonth, endDay] = endDate.split("-").map(Number);
   const startMinutes = minutesFromTime(startTime);
@@ -405,8 +410,8 @@ export function oneOffFormToEvent({
   };
 }
 
-export function oneOffEventToForm(event) {
-  const timezone = event.timezone || PEOPLE[event.owner].homeTimeZone;
+export function oneOffEventToForm(event, people = PEOPLE) {
+  const timezone = event.timezone || people[event.owner]?.homeTimeZone || PEOPLE[event.owner].homeTimeZone;
 
   return {
     owner: event.owner,
@@ -438,6 +443,7 @@ export function routineFormToEvent({
   startTime,
   endTime,
   createdAt,
+  people = PEOPLE,
 }) {
   const cleanedDays = Array.from(new Set(days)).filter(Boolean);
 
@@ -448,7 +454,7 @@ export function routineFormToEvent({
     label: title.trim(),
     title: title.trim(),
     type,
-    timezone: PEOPLE[owner].homeTimeZone,
+    timezone: people[owner]?.homeTimeZone || PEOPLE[owner].homeTimeZone,
     days: cleanedDays,
     start: startTime,
     end: endTime,

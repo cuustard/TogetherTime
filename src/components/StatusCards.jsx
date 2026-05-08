@@ -1,10 +1,8 @@
 import { memo } from "react";
 import { STATUS_STYLES } from "../constants/availability";
-import { PEOPLE } from "../data/people";
 import { Card, CardContent } from "./Card";
 
-function PersonStatus({ personKey, status, time, viewer }) {
-  const person = PEOPLE[personKey];
+function PersonStatus({ personKey, person, status, time, viewer }) {
   const styleClass = STATUS_STYLES[status.type] || STATUS_STYLES.unknown;
 
   return (
@@ -32,6 +30,17 @@ function PersonStatus({ personKey, status, time, viewer }) {
 
 const MemoPersonStatus = memo(PersonStatus);
 
+function WaitingForPartner({ inviteCode }) {
+  return (
+    <div className="rounded-2xl bg-pink-50 px-3 py-3">
+      <div className="text-sm font-black text-pink-800">Waiting for partner</div>
+      <div className="mt-1 text-xs font-semibold text-pink-700/80">
+        Share invite code {inviteCode ? <span className="font-black">{inviteCode}</span> : "from the header"} so they can join this timeline.
+      </div>
+    </div>
+  );
+}
+
 function CombinedPersonStatus({
   you,
   youTime,
@@ -39,6 +48,9 @@ function CombinedPersonStatus({
   partnerTime,
   viewer,
   timeDifferenceLabel,
+  people,
+  hasPartner,
+  inviteCode,
 }) {
   return (
     <Card className="rounded-2xl border-0 bg-white shadow-sm">
@@ -46,25 +58,33 @@ function CombinedPersonStatus({
         <div className="space-y-4">
           <MemoPersonStatus
             personKey="you"
+            person={people.you}
             status={you}
             time={youTime}
             viewer={viewer}
           />
 
-          <div className="relative -mx-4 flex items-center gap-2">
-            <div className="flex-1 border-t border-slate-100" />
-            <div className="rounded-full border border-slate-200/70 bg-slate-50 px-2.5 py-0.5 text-xs font-medium tracking-wide text-slate-500">
-              {timeDifferenceLabel}
-            </div>
-            <div className="flex-1 border-t border-slate-100" />
-          </div>
+          {hasPartner ? (
+            <>
+              <div className="relative -mx-4 flex items-center gap-2">
+                <div className="flex-1 border-t border-slate-100" />
+                <div className="rounded-full border border-slate-200/70 bg-slate-50 px-2.5 py-0.5 text-xs font-medium tracking-wide text-slate-500">
+                  {timeDifferenceLabel}
+                </div>
+                <div className="flex-1 border-t border-slate-100" />
+              </div>
 
-          <MemoPersonStatus
-            personKey="partner"
-            status={partner}
-            time={partnerTime}
-            viewer={viewer}
-          />
+              <MemoPersonStatus
+                personKey="partner"
+                person={people.partner}
+                status={partner}
+                time={partnerTime}
+                viewer={viewer}
+              />
+            </>
+          ) : (
+            <WaitingForPartner inviteCode={inviteCode} />
+          )}
         </div>
       </CardContent>
     </Card>
