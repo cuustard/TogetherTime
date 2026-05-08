@@ -35,7 +35,6 @@ export function OneOffEventComposer({
     };
   }, [initialEvent, isEditing, now, viewer, viewerPerson.homeTimeZone, people]);
 
-  const [owner, setOwner] = useState(viewer);
   const [title, setTitle] = useState(initialForm.title);
   const [type, setType] = useState(initialForm.type);
   const [startDate, setStartDate] = useState(initialForm.startDate);
@@ -45,7 +44,6 @@ export function OneOffEventComposer({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setOwner(viewer);
     setTitle(initialForm.title);
     setType(initialForm.type);
     setStartDate(initialForm.startDate);
@@ -83,7 +81,9 @@ export function OneOffEventComposer({
     });
 
     if (new Date(nextEvent.endAt) <= new Date(nextEvent.startAt)) {
-      setError("The end needs to be after the start. For overnight one-offs, use the next day as the end date.");
+      setError(
+        "The end needs to be after the start. For overnight one-offs, use the next day as the end date.",
+      );
       return;
     }
 
@@ -102,13 +102,17 @@ export function OneOffEventComposer({
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-              {isEditing ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {isEditing ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
               {isEditing ? "Edit one-off event" : "Add a one-off event"}
             </div>
             <div className="mt-1 text-xs text-slate-500">
               {isEditing
-                ? `Editing as ${viewerPerson.name}. You can only change your own events.`
-                : `Adding as ${viewerPerson.name}. One-off events happen once at an exact time.`}
+                ? `Only you can edit your own events.`
+                : `One-off events do not repeat. They happen once at an exact date and time.`}
             </div>
           </div>
 
@@ -135,19 +139,7 @@ export function OneOffEventComposer({
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block text-xs font-bold text-slate-500">
-              Person
-              <select
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-500 outline-none"
-                value={owner}
-                onChange={(event) => setOwner(event.target.value)}
-                disabled
-              >
-                <option value="you">{viewerPerson.name}</option>
-              </select>
-            </label>
-
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-1">
             <label className="block text-xs font-bold text-slate-500">
               Type
               <select
@@ -209,10 +201,6 @@ export function OneOffEventComposer({
                 onChange={(event) => setEndTime(event.target.value)}
               />
             </label>
-          </div>
-
-          <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-            Times are entered in {viewerPerson.name}'s home timezone: {prettyTimeZone(viewerPerson.homeTimeZone)}. For overnight events, set the end date to the next day.
           </div>
 
           {error && (

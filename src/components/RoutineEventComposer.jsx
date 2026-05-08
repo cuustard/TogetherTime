@@ -40,7 +40,6 @@ export function RoutineEventComposer({
     };
   }, [initialEvent, isEditing, viewer]);
 
-  const [owner, setOwner] = useState(initialForm.owner);
   const [title, setTitle] = useState(initialForm.title);
   const [type, setType] = useState(initialForm.type);
   const [days, setDays] = useState(initialForm.days);
@@ -49,7 +48,6 @@ export function RoutineEventComposer({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setOwner(viewer);
     setTitle(initialForm.title);
     setType(initialForm.type);
     setDays(initialForm.days);
@@ -86,7 +84,9 @@ export function RoutineEventComposer({
     }
 
     if (startTime === endTime) {
-      setError("Start and end time cannot be the same. Earlier end times are allowed for overnight routines.");
+      setError(
+        "Start and end time cannot be the same. Earlier end times are allowed for overnight routines.",
+      );
       return;
     }
 
@@ -117,13 +117,17 @@ export function RoutineEventComposer({
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
-              {isEditing ? <Check className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
+              {isEditing ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Repeat className="h-4 w-4" />
+              )}
               {isEditing ? "Edit recurring event" : "Add a recurring event"}
             </div>
             <div className="mt-1 text-xs text-slate-500">
               {isEditing
-                ? `Editing as ${viewerPerson.name}. You can only change your own recurring events.`
-                : `Adding as ${viewerPerson.name}. Repeats weekly and is saved to your shared timeline.`}
+                ? `Only you can edit your own events.`
+                : `Repeats weekly on selected days.`}
             </div>
           </div>
 
@@ -150,19 +154,7 @@ export function RoutineEventComposer({
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
-            <label className="block text-xs font-bold text-slate-500">
-              Person
-              <select
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-500 outline-none"
-                value={owner}
-                onChange={(event) => setOwner(event.target.value)}
-                disabled
-              >
-                <option value="you">{viewerPerson.name}</option>
-              </select>
-            </label>
-
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-1">
             <label className="block text-xs font-bold text-slate-500">
               Type
               <select
@@ -222,10 +214,6 @@ export function RoutineEventComposer({
                 onChange={(event) => setEndTime(event.target.value)}
               />
             </label>
-          </div>
-
-          <div className="text-xs text-slate-500">
-            Times are entered in {viewerPerson.name}'s home timezone: {prettyTimeZone(viewerPerson.homeTimeZone)}. If the end time is earlier than the start time, it flows overnight.
           </div>
 
           {error && (

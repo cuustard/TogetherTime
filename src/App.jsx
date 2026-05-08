@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Heart, LogOut, MapPin, RefreshCcw } from "lucide-react";
+import { CalendarDays, Heart, LogOut, MapPin, Plus } from "lucide-react";
 import { Card, CardContent } from "./components/Card";
 import { OneOffEventComposer } from "./components/OneOffEventComposer";
 import { OneOffEventDetails } from "./components/OneOffEventDetails";
 import { RoutineEventComposer } from "./components/RoutineEventComposer";
 import { RoutineEventDetails } from "./components/RoutineEventDetails";
-import { RoutineEventsList } from "./components/RoutineEventsList";
 import { MemoOverlapCard } from "./components/OverlapCard";
 import { MemoCombinedPersonStatus } from "./components/StatusCards";
 import { Timeline } from "./components/Timeline";
-import { UpcomingOneOffEvents } from "./components/UpcomingOneOffEvents";
 import {
   buildDayDividers,
   buildHourMarkers,
@@ -21,6 +19,7 @@ import {
 import {
   formatOffsetLabel,
   formatTimeInZone,
+  formatDayInZone,
   getLocalTimeZone,
   getTimeZoneOffsetMinutes,
   prettyTimeZone,
@@ -41,6 +40,21 @@ import AuthScreen from "./components/AuthScreen";
 import ProfileOnboarding from "./components/ProfileOnboarding";
 import TimelineOnboarding from "./components/TimelineOnboarding";
 
+// CSS animation for fade-out effect
+const style = document.createElement("style");
+style.innerHTML = `
+  @keyframes fadeOut {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .animate-fade-out {
+    animation: fadeOut 2s ease-out forwards;
+  }
+`;
+if (typeof document !== "undefined") {
+  document.head.appendChild(style);
+}
+
 // Together Time
 // Mobile-first relationship timezone planner.
 // The timeline is a continuous, scrollable stream of time.
@@ -51,10 +65,12 @@ import TimelineOnboarding from "./components/TimelineOnboarding";
 export default function TogetherTimeApp() {
   const [localTimeZone, setLocalTimeZone] = useState(getLocalTimeZone);
   const [now, setNow] = useState(() => new Date());
-  const [eventsByPerson, setEventsByPerson] = useState(createEmptyEventsByPerson);
+  const [eventsByPerson, setEventsByPerson] = useState(
+    createEmptyEventsByPerson,
+  );
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [editingEventId, setEditingEventId] = useState(null);
-  const [composerKind, setComposerKind] = useState("one_off");
+  const [composerKind, setComposerKind] = useState(null);
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState(null);
@@ -65,6 +81,7 @@ export default function TogetherTimeApp() {
   const [timelineError, setTimelineError] = useState("");
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError, setEventsError] = useState("");
+  const [lastRefreshAt, setLastRefreshAt] = useState(null);
   const [timelineMembers, setTimelineMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState("");
@@ -80,7 +97,6 @@ export default function TogetherTimeApp() {
   );
   const hasPartner = Boolean(people.partner.userId);
   const otherTimeZone = people.partner.homeTimeZone;
-  const otherTimeLabel = hasPartner ? `${people.partner.name}'s time` : "Partner time";
 
   useEffect(() => {
     let isMounted = true;
@@ -209,7 +225,12 @@ export default function TogetherTimeApp() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!sharedTimeline?.id || !session?.user?.id || membersLoading || membersError) {
+    if (
+      !sharedTimeline?.id ||
+      !session?.user?.id ||
+      membersLoading ||
+      membersError
+    ) {
       setEventsByPerson(createEmptyEventsByPerson());
       setEventsLoading(false);
       setEventsError("");
@@ -244,7 +265,15 @@ export default function TogetherTimeApp() {
     return () => {
       isMounted = false;
     };
-  }, [sharedTimeline?.id, session?.user?.id, viewer, otherPersonKey, people, membersLoading, membersError]);
+  }, [
+    sharedTimeline?.id,
+    session?.user?.id,
+    viewer,
+    otherPersonKey,
+    people,
+    membersLoading,
+    membersError,
+  ]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -258,7 +287,6 @@ export default function TogetherTimeApp() {
 
     return () => window.clearInterval(timer);
   }, []);
-
 
   function replaceEventInState(previousOwner, nextEvent) {
     setEventsByPerson((currentEvents) => {
@@ -297,6 +325,7 @@ export default function TogetherTimeApp() {
       });
 
       setEventsByPerson(nextEvents);
+      setLastRefreshAt(new Date());
     } catch (error) {
       setEventsError(error.message || "Could not load shared events.");
     } finally {
@@ -305,7 +334,8 @@ export default function TogetherTimeApp() {
   }
 
   async function addEvent(event) {
-    if (event.owner !== viewer || !sharedTimeline?.id || !session?.user?.id) return;
+    if (event.owner !== viewer || !sharedTimeline?.id || !session?.user?.id)
+      return;
 
     setEventsError("");
 
@@ -320,7 +350,10 @@ export default function TogetherTimeApp() {
 
       setEventsByPerson((currentEvents) => ({
         ...currentEvents,
-        [savedEvent.owner]: [...(currentEvents[savedEvent.owner] || []), savedEvent],
+        [savedEvent.owner]: [
+          ...(currentEvents[savedEvent.owner] || []),
+          savedEvent,
+        ],
       }));
     } catch (error) {
       setEventsError(error.message || "Could not save that event.");
@@ -366,11 +399,14 @@ export default function TogetherTimeApp() {
 
       setEventsByPerson((currentEvents) => ({
         ...currentEvents,
-        [owner]: (currentEvents[owner] || []).filter((event) => event.id !== eventId),
+        [owner]: (currentEvents[owner] || []).filter(
+          (event) => event.id !== eventId,
+        ),
       }));
 
       setSelectedEvent((currentSelection) =>
-        currentSelection?.owner === owner && currentSelection?.eventId === eventId
+        currentSelection?.owner === owner &&
+        currentSelection?.eventId === eventId
           ? null
           : currentSelection,
       );
@@ -397,7 +433,13 @@ export default function TogetherTimeApp() {
         eventsByPerson,
         people,
       ),
-    [timeline.startUtc, timeline.endUtc, timeline.totalHeight, eventsByPerson, people],
+    [
+      timeline.startUtc,
+      timeline.endUtc,
+      timeline.totalHeight,
+      eventsByPerson,
+      people,
+    ],
   );
 
   const partnerBlocks = useMemo(
@@ -410,12 +452,34 @@ export default function TogetherTimeApp() {
         eventsByPerson,
         people,
       ),
-    [timeline.startUtc, timeline.endUtc, timeline.totalHeight, eventsByPerson, people],
+    [
+      timeline.startUtc,
+      timeline.endUtc,
+      timeline.totalHeight,
+      eventsByPerson,
+      people,
+    ],
   );
 
   const overlapWindows = useMemo(
-    () => hasPartner ? findOverlapWindows(timeline.startUtc, timeline.endUtc, now, eventsByPerson, people) : [],
-    [timeline.startUtc, timeline.endUtc, now, eventsByPerson, people, hasPartner],
+    () =>
+      hasPartner
+        ? findOverlapWindows(
+            timeline.startUtc,
+            timeline.endUtc,
+            now,
+            eventsByPerson,
+            people,
+          )
+        : [],
+    [
+      timeline.startUtc,
+      timeline.endUtc,
+      now,
+      eventsByPerson,
+      people,
+      hasPartner,
+    ],
   );
 
   const nextWindows = overlapWindows
@@ -428,7 +492,10 @@ export default function TogetherTimeApp() {
   );
 
   const currentPartner = useMemo(
-    () => hasPartner ? getStatusAt("partner", now, eventsByPerson, people) : { type: "unknown", label: "Not joined" },
+    () =>
+      hasPartner
+        ? getStatusAt("partner", now, eventsByPerson, people)
+        : { type: "unknown", label: "Not joined" },
     [now, eventsByPerson, people, hasPartner],
   );
 
@@ -470,10 +537,11 @@ export default function TogetherTimeApp() {
     ],
   );
 
-
   const selectedEventRecord = selectedEvent
     ? (eventsByPerson[selectedEvent.owner] || []).find(
-        (event) => event.id === selectedEvent.eventId && event.kind === selectedEvent.kind,
+        (event) =>
+          event.id === selectedEvent.eventId &&
+          event.kind === selectedEvent.kind,
       )
     : null;
 
@@ -490,7 +558,6 @@ export default function TogetherTimeApp() {
     const desiredTop = Math.max(0, nowTop - scrollEl.clientHeight * 0.38);
     scrollEl.scrollTop = desiredTop;
   }, [viewerTimeZone, nowTop]);
-
 
   if (authLoading) {
     return (
@@ -668,15 +735,14 @@ export default function TogetherTimeApp() {
                 When can we talk?
               </h1>
 
-              <div className="mt-1 text-xs text-slate-500">
-                Signed in as {profile.display_name} · {sharedTimeline.name}
-              </div>
-              <div className="mt-1 text-xs font-bold text-pink-700">
-                Invite code: {sharedTimeline.invite_code}
-              </div>
+              {timelineMembers.length < 2 && (
+                <div className="mt-1 text-xs font-bold text-pink-700">
+                  Invite code: {sharedTimeline.invite_code}
+                </div>
+              )}
             </div>
-            <div className="flex flex-col items-end gap-2">
-              <div className="rounded-2xl bg-white px-3 py-2 text-right text-xs font-semibold text-slate-500 shadow-sm">
+            <div className="flex flex-col items-end gap-2 w-fit">
+              <div className="rounded-2xl bg-white px-3 py-2 text-right text-xs font-semibold text-slate-500 shadow-sm w-full">
                 <div className="flex items-center gap-1">
                   <MapPin className="h-3 w-3" /> Device time
                 </div>
@@ -685,7 +751,7 @@ export default function TogetherTimeApp() {
                 </div>
               </div>
               <button
-                className="flex items-center gap-1 rounded-full bg-white/80 px-3 py-1.5 text-xs font-black text-slate-500 shadow-sm active:scale-95"
+                className="w-full flex items-center justify-center gap-1 rounded-full bg-white/80 px-3 py-1.5 text-xs font-black text-slate-500 shadow-sm active:scale-95"
                 type="button"
                 onClick={() => supabase.auth.signOut()}
               >
@@ -695,12 +761,25 @@ export default function TogetherTimeApp() {
           </div>
         </header>
 
-        <section className="grid grid-cols-1 gap-3">
+        <section className="space-y-3 border-t border-slate-200 pt-5">
+          <div className="flex items-center gap-2 px-1 text-sm font-bold text-slate-700">
+            <Heart className="h-4 w-4 fill-pink-200" /> Your status
+          </div>
           <MemoCombinedPersonStatus
             you={currentYou}
+            youDate={formatDayInZone(now, people.you.homeTimeZone)}
             youTime={formatTimeInZone(now, people.you.homeTimeZone)}
             partner={currentPartner}
-            partnerTime={hasPartner ? formatTimeInZone(now, people.partner.homeTimeZone) : "—"}
+            partnerDate={
+              hasPartner
+                ? formatDayInZone(now, people.partner.homeTimeZone)
+                : "—"
+            }
+            partnerTime={
+              hasPartner
+                ? formatTimeInZone(now, people.partner.homeTimeZone)
+                : "—"
+            }
             viewer={viewer}
             timeDifferenceLabel={timeDifferenceLabel}
             people={people}
@@ -709,7 +788,7 @@ export default function TogetherTimeApp() {
           />
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-3 border-t border-slate-200 pt-5">
           <div className="flex items-center gap-2 px-1 text-sm font-bold text-slate-700">
             <CalendarDays className="h-4 w-4" /> Next good windows
           </div>
@@ -728,14 +807,17 @@ export default function TogetherTimeApp() {
             <Card className="rounded-2xl border-0 bg-white shadow-sm">
               <CardContent className="p-4 text-sm text-slate-600">
                 {hasPartner
-                  ? "No good call windows in the visible timeline. Adjust the timetable or increase the range."
+                  ? "No shared free time in this timeline range yet. Call windows will appear when you’re both free."
                   : `Invite your partner with code ${sharedTimeline.invite_code} to start finding shared call windows.`}
               </CardContent>
             </Card>
           )}
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-3 border-t border-slate-200 pt-5">
+          <div className="flex items-center gap-2 px-1 text-sm font-bold text-slate-700">
+            <Plus className="h-4 w-4" /> Add an event
+          </div>
           <Card className="rounded-2xl border-0 bg-white shadow-sm">
             <CardContent className="space-y-3 p-3">
               <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
@@ -746,7 +828,11 @@ export default function TogetherTimeApp() {
                       : "text-slate-500"
                   }`}
                   type="button"
-                  onClick={() => setComposerKind("one_off")}
+                  onClick={() =>
+                    setComposerKind(
+                      composerKind === "one_off" ? null : "one_off",
+                    )
+                  }
                 >
                   One-off
                 </button>
@@ -757,25 +843,17 @@ export default function TogetherTimeApp() {
                       : "text-slate-500"
                   }`}
                   type="button"
-                  onClick={() => setComposerKind("routine")}
+                  onClick={() =>
+                    setComposerKind(
+                      composerKind === "routine" ? null : "routine",
+                    )
+                  }
                 >
                   Recurring
                 </button>
               </div>
-
-              <div className="rounded-2xl bg-pink-50 px-3 py-2 text-xs font-semibold text-pink-800">
-                Events are saved to your shared timeline as {people.you.name}. You can edit only events created by your account.
-              </div>
             </CardContent>
           </Card>
-
-          {eventsLoading && (
-            <Card className="rounded-2xl border-0 bg-white shadow-sm">
-              <CardContent className="p-4 text-sm font-semibold text-slate-500">
-                Loading shared events...
-              </CardContent>
-            </Card>
-          )}
 
           {eventsError && (
             <Card className="rounded-2xl border-0 bg-red-50 shadow-sm">
@@ -785,64 +863,43 @@ export default function TogetherTimeApp() {
             </Card>
           )}
 
-          {composerKind === "one_off" ? (
-            <OneOffEventComposer viewer={viewer} now={now} onAdd={addEvent} people={people} />
-          ) : (
-            <RoutineEventComposer viewer={viewer} onAdd={addEvent} people={people} />
+          {composerKind === "one_off" && (
+            <OneOffEventComposer
+              viewer={viewer}
+              now={now}
+              onAdd={addEvent}
+              people={people}
+            />
           )}
 
-          <UpcomingOneOffEvents
-            eventsByPerson={eventsByPerson}
-            viewer={viewer}
-            viewerTimeZone={viewerTimeZone}
-            now={now}
-            onSelect={(owner, eventId) => selectEvent(owner, eventId, "one_off")}
-            onRemove={removeEvent}
-            people={people}
-          />
-          <RoutineEventsList
-            eventsByPerson={eventsByPerson}
-            viewer={viewer}
-            onSelect={(owner, eventId) => selectEvent(owner, eventId, "routine")}
-            onRemove={removeEvent}
-            people={people}
-          />
-
-          <Card className="rounded-2xl border-0 bg-white shadow-sm">
-            <CardContent className="flex items-center justify-between gap-3 p-4">
-              <div>
-                <div className="text-sm font-bold text-slate-800">Shared timeline events</div>
-                <div className="mt-1 text-xs text-slate-500">
-                  Events are loaded from Supabase for everyone in this timeline.
-                </div>
-              </div>
-              <button
-                className="flex shrink-0 items-center gap-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600 active:scale-95 disabled:opacity-60"
-                type="button"
-                onClick={refreshSharedEvents}
-                disabled={eventsLoading}
-              >
-                <RefreshCcw className="h-3.5 w-3.5" /> Refresh
-              </button>
-            </CardContent>
-          </Card>
+          {composerKind === "routine" && (
+            <RoutineEventComposer
+              viewer={viewer}
+              onAdd={addEvent}
+              people={people}
+            />
+          )}
         </section>
 
-        <Timeline
-          timelineScrollRef={timelineScrollRef}
-          timeline={timeline}
-          hourMarkers={hourMarkers}
-          dayDividers={dayDividers}
-          youBlocks={youBlocks}
-          partnerBlocks={partnerBlocks}
-          viewerTimeZone={viewerTimeZone}
-          otherTimeZone={otherTimeZone}
-          otherTimeLabel={otherTimeLabel}
-          nowTop={nowTop}
-          onSelectEvent={selectEvent}
-          people={people}
-          hasPartner={hasPartner}
-        />
+        <div className="border-t border-slate-200 pt-5">
+          <Timeline
+            timelineScrollRef={timelineScrollRef}
+            timeline={timeline}
+            hourMarkers={hourMarkers}
+            dayDividers={dayDividers}
+            youBlocks={youBlocks}
+            partnerBlocks={partnerBlocks}
+            viewerTimeZone={viewerTimeZone}
+            otherTimeZone={otherTimeZone}
+            nowTop={nowTop}
+            onSelectEvent={selectEvent}
+            people={people}
+            hasPartner={hasPartner}
+            onRefreshSharedEvents={refreshSharedEvents}
+            refreshDisabled={eventsLoading}
+            lastRefreshAt={lastRefreshAt}
+          />
+        </div>
 
         <OneOffEventDetails
           event={selectedOneOffEvent}

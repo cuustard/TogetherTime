@@ -1,18 +1,40 @@
-import { Clock, Moon, Sun, UserRound } from "lucide-react";
+import { Check, Clock, RefreshCcw, Moon, Sun, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
 import { formatTimeInZone } from "../lib/time";
 import { MemoTimelineBlock } from "./TimelineBlock";
+
+// Inject CSS for fade-out animation
+if (
+  typeof document !== "undefined" &&
+  !document.getElementById("timeline-fade-animation")
+) {
+  const style = document.createElement("style");
+  style.id = "timeline-fade-animation";
+  style.innerHTML = `
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    .animate-fade-out {
+      animation: fadeOut 2s ease-out forwards;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 function DayDivider({ divider, variant, label }) {
   const isHer = variant === "her";
   return (
     <div
-      className="pointer-events-none absolute left-0 right-0 z-10 flex items-center gap-2"
-      style={{ top: divider.top }}
+      className="pointer-events-none absolute left-0 right-2 z-10 flex items-center gap-2"
+      style={{ top: divider.top, transform: "translateY(-50%)" }}
     >
       <div className="h-px flex-1 bg-slate-200" />
       <div
         className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm bg-white ${
-          isHer ? "border-pink-100 text-pink-700" : "border-slate-200 text-slate-700"
+          isHer
+            ? "border-pink-100 text-pink-700"
+            : "border-slate-200 text-slate-700"
         }`}
       >
         <div className="whitespace-nowrap">{divider.label}</div>
@@ -34,41 +56,69 @@ export function Timeline({
   partnerBlocks,
   viewerTimeZone,
   otherTimeZone,
-  otherTimeLabel,
   nowTop,
   onSelectEvent,
   people,
   hasPartner,
+  onRefreshSharedEvents,
+  refreshDisabled,
+  lastRefreshAt,
 }) {
+  const [showRefreshCheck, setShowRefreshCheck] = useState(false);
+
+  useEffect(() => {
+    if (lastRefreshAt) {
+      setShowRefreshCheck(true);
+      const timer = setTimeout(() => {
+        setShowRefreshCheck(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [lastRefreshAt]);
+
   return (
     <section className="space-y-3 pb-10">
-      <div className="flex items-center justify-between px-1">
+      <div className="flex items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-          <Clock className="h-4 w-4" /> Scrollable timeline
+          <Clock className="h-4 w-4" /> Timeline
         </div>
-        <div className="text-xs font-semibold text-slate-500">
-          Events flow across midnight
-        </div>
+        <button
+          className="flex shrink-0 items-center gap-2 rounded-2xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-600 active:scale-95 disabled:opacity-60 relative"
+          type="button"
+          onClick={onRefreshSharedEvents}
+          disabled={refreshDisabled}
+        >
+          {showRefreshCheck ? (
+            <Check className="h-3.5 w-3.5 text-green-600 animate-fade-out" />
+          ) : (
+            <RefreshCcw className="h-3.5 w-3.5" />
+          )}
+          Refresh
+        </button>
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="grid grid-cols-[54px_1fr_1fr_54px] border-b border-slate-100 bg-slate-50 px-2 py-3 text-xs font-bold text-slate-500">
-          <div>Time</div>
-          <div className="flex items-center justify-center gap-1 text-center">
-            <UserRound className="h-3 w-3" /> {people.you.name}
-          </div>
-          <div className="flex items-center justify-center gap-1 text-center">
-            <UserRound className="h-3 w-3" /> {hasPartner ? people.partner.name : "Partner"}
-          </div>
-          <div className="text-right">{otherTimeLabel}</div>
-        </div>
-
         <div
           ref={timelineScrollRef}
           className="max-h-[70vh] overflow-y-auto overscroll-contain"
         >
+          <div className="sticky top-0 z-20 grid h-12 grid-cols-[54px_1fr_1fr_54px] border-b border-slate-100 bg-slate-50 px-2 text-xs font-bold text-slate-500">
+            <div aria-hidden="true" />
+            <div className="relative">
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 whitespace-nowrap">
+                {people.you.name}
+              </div>
+            </div>
+            <div className="relative">
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 whitespace-nowrap">
+                {hasPartner ? people.partner.name : "Partner"}
+              </div>
+            </div>
+            <div className="text-right" aria-hidden="true" />
+          </div>
+
           <div
-            className="relative grid grid-cols-[54px_1fr_1fr_54px] px-2"
+            className="relative grid grid-cols-[54px_1fr_1fr_54px] px-2 pt-10 pb-10"
             style={{ height: timeline.totalHeight }}
           >
             <div className="relative border-r border-slate-100">
@@ -152,7 +202,7 @@ export function Timeline({
             </div>
 
             <div
-              className="pointer-events-none absolute z-20"
+              className="pointer-events-none absolute z-10"
               style={{
                 top: nowTop,
                 left: 54,
@@ -165,15 +215,6 @@ export function Timeline({
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-        <div className="rounded-2xl bg-white p-3 shadow-sm">
-          <Moon className="mb-1 h-4 w-4" /> Starry blocks mean asleep.
-        </div>
-        <div className="rounded-2xl bg-white p-3 shadow-sm">
-          <Sun className="mb-1 h-4 w-4" /> Green means free to talk.
         </div>
       </div>
     </section>
