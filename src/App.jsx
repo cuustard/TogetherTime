@@ -86,6 +86,7 @@ export default function TogetherTimeApp() {
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState("");
   const timelineScrollRef = useRef(null);
+  const hasInitiallyScrolledRef = useRef(false);
 
   const viewer = "you";
   const viewerTimeZone = localTimeZone;
@@ -553,11 +554,13 @@ export default function TogetherTimeApp() {
 
   useEffect(() => {
     const scrollEl = timelineScrollRef.current;
-    if (!scrollEl) return;
+    if (!scrollEl || hasInitiallyScrolledRef.current) return;
 
+    // Only scroll on initial load, not on subsequent updates
     const desiredTop = Math.max(0, nowTop - scrollEl.clientHeight * 0.38);
     scrollEl.scrollTop = desiredTop;
-  }, [viewerTimeZone, nowTop]);
+    hasInitiallyScrolledRef.current = true;
+  }, [nowTop]);
 
   if (authLoading) {
     return (
