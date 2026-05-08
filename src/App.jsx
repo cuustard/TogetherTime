@@ -28,7 +28,11 @@ import {
   prettyTimeZone,
 } from "./lib/time";
 import { supabase } from "./lib/supabase";
+import { fetchProfile } from "./lib/profiles";
+import { fetchUserTimeline } from "./lib/timelines";
 import AuthScreen from "./components/AuthScreen";
+import ProfileOnboarding from "./components/ProfileOnboarding";
+import TimelineOnboarding from "./components/TimelineOnboarding";
 
 // Together Time
 // Mobile-first relationship timezone planner.
@@ -46,6 +50,12 @@ export default function TogetherTimeApp() {
   const [composerKind, setComposerKind] = useState("one_off");
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [sharedTimeline, setSharedTimeline] = useState(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [timelineError, setTimelineError] = useState("");
   const timelineScrollRef = useRef(null);
 
   const viewerFromUrl = new URLSearchParams(window.location.search)
@@ -80,6 +90,74 @@ export default function TogetherTimeApp() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!session?.user?.id) {
+      setProfile(null);
+      setProfileLoading(false);
+      setProfileError("");
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    setProfileLoading(true);
+    setProfileError("");
+
+    fetchProfile(session.user.id)
+      .then((nextProfile) => {
+        if (!isMounted) return;
+        setProfile(nextProfile);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setProfileError(error.message || "Could not load your profile.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setProfileLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!session?.user?.id || !profile) {
+      setSharedTimeline(null);
+      setTimelineLoading(false);
+      setTimelineError("");
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    setTimelineLoading(true);
+    setTimelineError("");
+
+    fetchUserTimeline(session.user.id)
+      .then((nextTimeline) => {
+        if (!isMounted) return;
+        setSharedTimeline(nextTimeline);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setTimelineError(error.message || "Could not load your timeline.");
+      })
+      .finally(() => {
+        if (!isMounted) return;
+        setTimelineLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.id, profile]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -283,6 +361,110 @@ export default function TogetherTimeApp() {
     return <AuthScreen />;
   }
 
+  if (profileLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-pink-50 px-4 text-center text-sm font-bold text-slate-500">
+        Loading your profile...
+      </main>
+    );
+  }
+
+  if (profileError) {
+    return (
+      <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-8 text-slate-950">
+        <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center">
+          <section className="w-full rounded-[2rem] border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
+            <div className="flex items-center gap-2 text-sm font-semibold text-pink-700">
+              <Heart className="h-4 w-4 fill-pink-200" />
+              Together Time
+            </div>
+            <h1 className="mt-4 text-2xl font-black tracking-tight">
+              Could not load your profile
+            </h1>
+            <p className="mt-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {profileError}
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                className="rounded-2xl bg-pink-600 px-4 py-3 text-sm font-black text-white"
+                type="button"
+                onClick={() => window.location.reload()}
+              >
+                Try again
+              </button>
+              <button
+                className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-600"
+                type="button"
+                onClick={() => supabase.auth.signOut()}
+              >
+                Sign out
+              </button>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (!profile) {
+    return <ProfileOnboarding session={session} onComplete={setProfile} />;
+  }
+
+  if (timelineLoading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-pink-50 px-4 text-center text-sm font-bold text-slate-500">
+        Loading your timeline...
+      </main>
+    );
+  }
+
+  if (timelineError) {
+    return (
+      <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-8 text-slate-950">
+        <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center">
+          <section className="w-full rounded-[2rem] border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
+            <div className="flex items-center gap-2 text-sm font-semibold text-pink-700">
+              <Heart className="h-4 w-4 fill-pink-200" />
+              Together Time
+            </div>
+            <h1 className="mt-4 text-2xl font-black tracking-tight">
+              Could not load your timeline
+            </h1>
+            <p className="mt-2 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {timelineError}
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                className="rounded-2xl bg-pink-600 px-4 py-3 text-sm font-black text-white"
+                type="button"
+                onClick={() => window.location.reload()}
+              >
+                Try again
+              </button>
+              <button
+                className="rounded-2xl bg-slate-100 px-4 py-3 text-sm font-black text-slate-600"
+                type="button"
+                onClick={() => supabase.auth.signOut()}
+              >
+                Sign out
+              </button>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  if (!sharedTimeline) {
+    return (
+      <TimelineOnboarding
+        profile={profile}
+        session={session}
+        onComplete={setSharedTimeline}
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-5 text-slate-950">
       <div className="mx-auto max-w-md space-y-5">
@@ -299,7 +481,10 @@ export default function TogetherTimeApp() {
               </h1>
 
               <div className="mt-1 text-xs text-slate-500">
-                Viewing as {viewerName}
+                Signed in as {profile.display_name} · {sharedTimeline.name} · demo view as {viewerName}
+              </div>
+              <div className="mt-1 text-xs font-bold text-pink-700">
+                Invite code: {sharedTimeline.invite_code}
               </div>
             </div>
             <div className="flex flex-col items-end gap-2">
