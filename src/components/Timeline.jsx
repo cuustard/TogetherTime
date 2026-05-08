@@ -89,7 +89,7 @@ export function Timeline({
           ref={timelineScrollRef}
           className="max-h-[70vh] overflow-y-auto overscroll-contain"
         >
-          <div className="sticky top-0 z-20 grid h-12 grid-cols-[54px_1fr_1fr_54px] border-b border-slate-100 bg-slate-50 px-2 text-xs font-bold text-slate-500">
+          <div className="sticky top-0 z-20 grid h-12 grid-cols-[36px_1fr_1fr_36px] border-b border-slate-100 bg-slate-50 px-2 text-xs font-bold text-slate-500">
             <div aria-hidden="true" />
             <div className="relative">
               <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1 whitespace-nowrap">
@@ -105,7 +105,7 @@ export function Timeline({
           </div>
 
           <div
-            className="relative grid grid-cols-[54px_1fr_1fr_54px] px-2 pt-10 pb-10"
+            className="relative grid grid-cols-[36px_1fr_1fr_36px] px-2 pt-10 pb-10"
             style={{ height: timeline.totalHeight }}
           >
             <div className="relative border-r border-slate-100">
@@ -192,8 +192,8 @@ export function Timeline({
               className="pointer-events-none absolute z-10"
               style={{
                 top: nowTop,
-                left: 54,
-                right: 54,
+                left: 36,
+                right: 36,
               }}
             >
               <div className="absolute left-0 right-0 top-1/2 h-0.5 -translate-y-1/2 bg-pink-600 shadow-sm" />
