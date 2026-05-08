@@ -216,6 +216,22 @@ function getResolvedScheduleIntervals(
   );
 }
 
+export function getResolvedScheduleIntervalsForRange(
+  personKey,
+  rangeStartUtc,
+  rangeEndUtc,
+  eventsByPerson = DEFAULT_EVENTS,
+  people = PEOPLE,
+) {
+  return getResolvedScheduleIntervals(
+    personKey,
+    rangeStartUtc,
+    rangeEndUtc,
+    eventsByPerson,
+    people,
+  );
+}
+
 export function getTimelineBounds(now, viewerTimeZone) {
   const viewerParts = getPartsInTimeZone(now, viewerTimeZone);
   const startParts = addDaysToDateParts(
@@ -250,6 +266,10 @@ export function generateScheduleIntervals(
   people = PEOPLE,
 ) {
   const personEvents = eventsByPerson[personKey] || [];
+  const routineEvents = personEvents.filter(
+    (event) => event.kind === "routine",
+  );
+  const oneOffEvents = personEvents.filter((event) => event.kind === "one_off");
   const personTimeZone =
     people[personKey]?.homeTimeZone || PEOPLE[personKey].homeTimeZone;
   const startParts = getPartsInTimeZone(rangeStartUtc, personTimeZone);
@@ -262,59 +282,43 @@ export function generateScheduleIntervals(
     const dateParts = addDaysToDateParts(startParts, dayOffset);
     const dayKey = getDayKeyFromDateParts(dateParts);
 
-    personEvents
-      .filter((event) => event.kind === "routine")
-      .forEach((event) => {
-        if (!event.days.includes(dayKey)) return;
+    routineEvents.forEach((event) => {
+      if (!event.days.includes(dayKey)) return;
 
-        const interval = recurringEventToUtcInterval(
-          personKey,
-          event,
-          dateParts,
-          people,
-        );
-        if (
-          interval.endUtc > rangeStartUtc &&
-          interval.startUtc < rangeEndUtc
-        ) {
-          intervals.push(interval);
-        }
-      });
-  }
-
-  personEvents
-    .filter((event) => event.kind === "one_off")
-    .forEach((event) => {
-      const startUtc = new Date(event.startAt);
-      const endUtc = new Date(event.endAt);
-
-      if (Number.isNaN(startUtc.getTime()) || Number.isNaN(endUtc.getTime())) {
-        return;
-      }
-
-      if (endUtc > rangeStartUtc && startUtc < rangeEndUtc) {
-        intervals.push({ ...event, startUtc, endUtc });
+      const interval = recurringEventToUtcInterval(
+        personKey,
+        event,
+        dateParts,
+        people,
+      );
+      if (interval.endUtc > rangeStartUtc && interval.startUtc < rangeEndUtc) {
+        intervals.push(interval);
       }
     });
+  }
+
+  oneOffEvents.forEach((event) => {
+    const startUtc = new Date(event.startAt);
+    const endUtc = new Date(event.endAt);
+
+    if (Number.isNaN(startUtc.getTime()) || Number.isNaN(endUtc.getTime())) {
+      return;
+    }
+
+    if (endUtc > rangeStartUtc && startUtc < rangeEndUtc) {
+      intervals.push({ ...event, startUtc, endUtc });
+    }
+  });
 
   return intervals.sort((a, b) => a.startUtc - b.startUtc);
 }
 
-export function buildVisibleBlocks(
-  personKey,
+export function buildVisibleBlocksFromIntervals(
+  intervals,
   rangeStartUtc,
   rangeEndUtc,
   totalHeight,
-  eventsByPerson = DEFAULT_EVENTS,
-  people = PEOPLE,
 ) {
-  const intervals = getResolvedScheduleIntervals(
-    personKey,
-    rangeStartUtc,
-    rangeEndUtc,
-    eventsByPerson,
-    people,
-  );
   const rangeDuration = rangeEndUtc.getTime() - rangeStartUtc.getTime();
 
   return intervals.map((interval) => {
@@ -338,6 +342,30 @@ export function buildVisibleBlocks(
       endUtc: new Date(clippedEnd),
     };
   });
+}
+
+export function buildVisibleBlocks(
+  personKey,
+  rangeStartUtc,
+  rangeEndUtc,
+  totalHeight,
+  eventsByPerson = DEFAULT_EVENTS,
+  people = PEOPLE,
+) {
+  const intervals = getResolvedScheduleIntervals(
+    personKey,
+    rangeStartUtc,
+    rangeEndUtc,
+    eventsByPerson,
+    people,
+  );
+
+  return buildVisibleBlocksFromIntervals(
+    intervals,
+    rangeStartUtc,
+    rangeEndUtc,
+    totalHeight,
+  );
 }
 
 export function getStatusAt(
@@ -386,7 +414,6 @@ export function findOverlapWindows(
   eventsByPerson,
   people = PEOPLE,
 ) {
-  const windows = [];
   const youIntervals = getResolvedScheduleIntervals(
     "you",
     rangeStartUtc,
@@ -401,6 +428,15 @@ export function findOverlapWindows(
     eventsByPerson,
     people,
   );
+
+  return findOverlapWindowsFromIntervals(youIntervals, partnerIntervals);
+}
+
+export function findOverlapWindowsFromIntervals(
+  youIntervals,
+  partnerIntervals,
+) {
+  const windows = [];
 
   let youIndex = 0;
   let partnerIndex = 0;

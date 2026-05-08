@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Heart, LogOut, MapPin, Plus } from "lucide-react";
 import { Card, CardContent } from "./components/Card";
 import { OneOffEventComposer } from "./components/OneOffEventComposer";
@@ -11,9 +11,9 @@ import { Timeline } from "./components/Timeline";
 import {
   buildDayDividers,
   buildHourMarkers,
-  buildVisibleBlocks,
-  findOverlapWindows,
-  getStatusAt,
+  buildVisibleBlocksFromIntervals,
+  findOverlapWindowsFromIntervals,
+  getResolvedScheduleIntervalsForRange,
   getTimelineBounds,
 } from "./lib/events";
 import {
@@ -314,7 +314,7 @@ export default function TogetherTimeApp() {
     return () => window.clearInterval(timer);
   }, []);
 
-  function replaceEventInState(previousOwner, nextEvent) {
+  const replaceEventInState = useCallback((previousOwner, nextEvent) => {
     setEventsByPerson((currentEvents) => {
       const withoutOldEvent = (currentEvents[previousOwner] || []).filter(
         (event) => event.id !== nextEvent.id,
@@ -333,9 +333,9 @@ export default function TogetherTimeApp() {
         [nextEvent.owner]: [...nextOwnerEvents, nextEvent],
       };
     });
-  }
+  }, []);
 
-  async function refreshSharedEvents() {
+  const refreshSharedEvents = useCallback(async () => {
     if (!sharedTimeline?.id || !session?.user?.id) return;
 
     setEventsLoading(true);
@@ -364,7 +364,7 @@ export default function TogetherTimeApp() {
     } finally {
       setEventsLoading(false);
     }
-  }
+  }, [people, otherPersonKey, session, sharedTimeline, viewer]);
 
   useEffect(
     () => () => {
@@ -375,162 +375,198 @@ export default function TogetherTimeApp() {
     [],
   );
 
-  async function addEvent(event) {
-    if (event.owner !== viewer || !sharedTimeline?.id || !session?.user?.id)
-      return;
+  const addEvent = useCallback(
+    async (event) => {
+      if (event.owner !== viewer || !sharedTimeline?.id || !session?.user?.id)
+        return;
 
-    setEventsError("");
+      setEventsError("");
 
-    try {
-      const savedEvent = await createTimelineEvent({
-        event,
-        timelineId: sharedTimeline.id,
-        userId: session.user.id,
-        viewerKey: viewer,
-        people,
-      });
+      try {
+        const savedEvent = await createTimelineEvent({
+          event,
+          timelineId: sharedTimeline.id,
+          userId: session.user.id,
+          viewerKey: viewer,
+          people,
+        });
 
-      setEventsByPerson((currentEvents) => ({
-        ...currentEvents,
-        [savedEvent.owner]: [
-          ...(currentEvents[savedEvent.owner] || []),
-          savedEvent,
-        ],
-      }));
-    } catch (error) {
-      setEventsError(error.message || "Could not save that event.");
-    }
-  }
+        setEventsByPerson((currentEvents) => ({
+          ...currentEvents,
+          [savedEvent.owner]: [
+            ...(currentEvents[savedEvent.owner] || []),
+            savedEvent,
+          ],
+        }));
+      } catch (error) {
+        setEventsError(error.message || "Could not save that event.");
+      }
+    },
+    [people, session, sharedTimeline, viewer],
+  );
 
-  function selectEvent(owner, eventId, kind) {
+  const selectEvent = useCallback((owner, eventId, kind) => {
     setSelectedEvent({ owner, eventId, kind });
     setEditingEventId(null);
-  }
+  }, []);
 
-  async function updateEvent(previousOwner, nextEvent) {
-    if (previousOwner !== viewer || nextEvent.owner !== viewer) return;
+  const updateEvent = useCallback(
+    async (previousOwner, nextEvent) => {
+      if (previousOwner !== viewer || nextEvent.owner !== viewer) return;
 
-    setEventsError("");
+      setEventsError("");
 
-    try {
-      const savedEvent = await updateTimelineEvent({
-        event: nextEvent,
-        viewerKey: viewer,
-        people,
-      });
+      try {
+        const savedEvent = await updateTimelineEvent({
+          event: nextEvent,
+          viewerKey: viewer,
+          people,
+        });
 
-      replaceEventInState(previousOwner, savedEvent);
-      setSelectedEvent({
-        owner: savedEvent.owner,
-        eventId: savedEvent.id,
-        kind: savedEvent.kind,
-      });
-      setEditingEventId(null);
-    } catch (error) {
-      setEventsError(error.message || "Could not update that event.");
-    }
-  }
+        replaceEventInState(previousOwner, savedEvent);
+        setSelectedEvent({
+          owner: savedEvent.owner,
+          eventId: savedEvent.id,
+          kind: savedEvent.kind,
+        });
+        setEditingEventId(null);
+      } catch (error) {
+        setEventsError(error.message || "Could not update that event.");
+      }
+    },
+    [people, replaceEventInState, viewer],
+  );
 
-  async function removeEvent(owner, eventId) {
-    if (owner !== viewer) return;
+  const removeEvent = useCallback(
+    async (owner, eventId) => {
+      if (owner !== viewer) return;
 
-    setEventsError("");
+      setEventsError("");
 
-    try {
-      await deleteTimelineEvent(eventId);
+      try {
+        await deleteTimelineEvent(eventId);
 
-      setEventsByPerson((currentEvents) => ({
-        ...currentEvents,
-        [owner]: (currentEvents[owner] || []).filter(
-          (event) => event.id !== eventId,
-        ),
-      }));
+        setEventsByPerson((currentEvents) => ({
+          ...currentEvents,
+          [owner]: (currentEvents[owner] || []).filter(
+            (event) => event.id !== eventId,
+          ),
+        }));
 
-      setSelectedEvent((currentSelection) =>
-        currentSelection?.owner === owner &&
-        currentSelection?.eventId === eventId
-          ? null
-          : currentSelection,
-      );
-      setEditingEventId((currentEventId) =>
-        currentEventId === eventId ? null : currentEventId,
-      );
-    } catch (error) {
-      setEventsError(error.message || "Could not delete that event.");
-    }
-  }
+        setSelectedEvent((currentSelection) =>
+          currentSelection?.owner === owner &&
+          currentSelection?.eventId === eventId
+            ? null
+            : currentSelection,
+        );
+        setEditingEventId((currentEventId) =>
+          currentEventId === eventId ? null : currentEventId,
+        );
+      } catch (error) {
+        setEventsError(error.message || "Could not delete that event.");
+      }
+    },
+    [viewer],
+  );
 
   const timeline = useMemo(
     () => getTimelineBounds(now, viewerTimeZone),
     [now, viewerTimeZone],
   );
 
-  const youBlocks = useMemo(
+  const resolvedYouIntervals = useMemo(
     () =>
-      buildVisibleBlocks(
+      getResolvedScheduleIntervalsForRange(
         "you",
         timeline.startUtc,
         timeline.endUtc,
-        timeline.totalHeight,
         eventsByPerson,
         people,
       ),
-    [
-      timeline.startUtc,
-      timeline.endUtc,
-      timeline.totalHeight,
-      eventsByPerson,
-      people,
-    ],
+    [timeline.startUtc, timeline.endUtc, eventsByPerson, people],
   );
 
-  const partnerBlocks = useMemo(
-    () =>
-      buildVisibleBlocks(
-        "partner",
-        timeline.startUtc,
-        timeline.endUtc,
-        timeline.totalHeight,
-        eventsByPerson,
-        people,
-      ),
-    [
-      timeline.startUtc,
-      timeline.endUtc,
-      timeline.totalHeight,
-      eventsByPerson,
-      people,
-    ],
-  );
-
-  const overlapWindows = useMemo(
+  const resolvedPartnerIntervals = useMemo(
     () =>
       hasPartner
-        ? findOverlapWindows(
+        ? getResolvedScheduleIntervalsForRange(
+            "partner",
             timeline.startUtc,
             timeline.endUtc,
             eventsByPerson,
             people,
           )
         : [],
-    [timeline.startUtc, timeline.endUtc, eventsByPerson, people, hasPartner],
+    [hasPartner, timeline.startUtc, timeline.endUtc, eventsByPerson, people],
   );
 
-  const nextWindows = overlapWindows
-    .filter((window) => window.endDate.getTime() >= now.getTime())
-    .slice(0, 3);
+  const youBlocks = useMemo(
+    () =>
+      buildVisibleBlocksFromIntervals(
+        resolvedYouIntervals,
+        timeline.startUtc,
+        timeline.endUtc,
+        timeline.totalHeight,
+      ),
+    [
+      resolvedYouIntervals,
+      timeline.startUtc,
+      timeline.endUtc,
+      timeline.totalHeight,
+    ],
+  );
+
+  const partnerBlocks = useMemo(
+    () =>
+      buildVisibleBlocksFromIntervals(
+        resolvedPartnerIntervals,
+        timeline.startUtc,
+        timeline.endUtc,
+        timeline.totalHeight,
+      ),
+    [
+      resolvedPartnerIntervals,
+      timeline.startUtc,
+      timeline.endUtc,
+      timeline.totalHeight,
+    ],
+  );
+
+  const overlapWindows = useMemo(
+    () =>
+      hasPartner
+        ? findOverlapWindowsFromIntervals(
+            resolvedYouIntervals,
+            resolvedPartnerIntervals,
+          )
+        : [],
+    [hasPartner, resolvedYouIntervals, resolvedPartnerIntervals],
+  );
+
+  const nextWindows = useMemo(
+    () =>
+      overlapWindows
+        .filter((window) => window.endDate.getTime() >= now.getTime())
+        .slice(0, 3),
+    [now, overlapWindows],
+  );
 
   const currentYou = useMemo(
-    () => getStatusAt("you", now, eventsByPerson, people),
-    [now, eventsByPerson, people],
+    () =>
+      resolvedYouIntervals.find(
+        (interval) => interval.startUtc <= now && interval.endUtc > now,
+      ) || { type: "unknown", label: "Unknown" },
+    [now, resolvedYouIntervals],
   );
 
   const currentPartner = useMemo(
     () =>
       hasPartner
-        ? getStatusAt("partner", now, eventsByPerson, people)
+        ? resolvedPartnerIntervals.find(
+            (interval) => interval.startUtc <= now && interval.endUtc > now,
+          ) || { type: "unknown", label: "Unknown" }
         : { type: "unknown", label: "Not joined" },
-    [now, eventsByPerson, people, hasPartner],
+    [hasPartner, now, resolvedPartnerIntervals],
   );
 
   const baseDifferenceMinutes =

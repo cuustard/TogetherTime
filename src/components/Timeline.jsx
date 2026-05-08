@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { Check, Clock, RefreshCcw } from "lucide-react";
 import { formatTimeInZone } from "../lib/time";
 import { MemoTimelineBlock } from "./TimelineBlock";
@@ -46,7 +47,7 @@ function DayDivider({ divider, variant, label }) {
   );
 }
 
-export function Timeline({
+function Timeline({
   timelineScrollRef,
   timeline,
   hourMarkers,
@@ -63,6 +64,16 @@ export function Timeline({
   refreshDisabled,
   showRefreshCheck,
 }) {
+  const youDayDividers = useMemo(
+    () => dayDividers.filter((divider) => divider.owner === "you"),
+    [dayDividers],
+  );
+
+  const partnerDayDividers = useMemo(
+    () => dayDividers.filter((divider) => divider.owner === "her"),
+    [dayDividers],
+  );
+
   return (
     <section className="space-y-3 pb-10">
       <div className="flex items-center justify-between gap-3 px-1">
@@ -136,16 +147,14 @@ export function Timeline({
                   people={people}
                 />
               ))}
-              {dayDividers
-                .filter((d) => d.owner === "you")
-                .map((divider) => (
-                  <DayDivider
-                    key={`${divider.date.getTime()}-${divider.owner}`}
-                    divider={divider}
-                    variant="you"
-                    label={people.you.name}
-                  />
-                ))}
+              {youDayDividers.map((divider) => (
+                <DayDivider
+                  key={`${divider.date.getTime()}-${divider.owner}`}
+                  divider={divider}
+                  variant="you"
+                  label={people.you.name}
+                />
+              ))}
             </div>
 
             <div className="relative border-r border-slate-100">
@@ -164,16 +173,14 @@ export function Timeline({
                   people={people}
                 />
               ))}
-              {dayDividers
-                .filter((d) => d.owner === "her")
-                .map((divider) => (
-                  <DayDivider
-                    key={`${divider.date.getTime()}-${divider.owner}`}
-                    divider={divider}
-                    variant="her"
-                    label={hasPartner ? people.partner.name : "Partner"}
-                  />
-                ))}
+              {partnerDayDividers.map((divider) => (
+                <DayDivider
+                  key={`${divider.date.getTime()}-${divider.owner}`}
+                  divider={divider}
+                  variant="her"
+                  label={hasPartner ? people.partner.name : "Partner"}
+                />
+              ))}
             </div>
 
             <div className="relative">
@@ -207,3 +214,6 @@ export function Timeline({
     </section>
   );
 }
+
+export const MemoTimeline = memo(Timeline);
+export { MemoTimeline as Timeline };
