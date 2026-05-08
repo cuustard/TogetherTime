@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Check, Repeat, X } from "lucide-react";
 import { STATUS_LABELS } from "../constants/availability";
 import { DAY_KEYS } from "../constants/timeline";
 import { routineEventToForm, routineFormToEvent } from "../lib/events";
-import { prettyTimeZone } from "../lib/time";
 import { Card, CardContent } from "./Card";
 
 const DAY_LABELS = {
@@ -26,19 +25,16 @@ export function RoutineEventComposer({
   people,
 }) {
   const isEditing = mode === "edit" && initialEvent;
-  const viewerPerson = people[viewer];
-  const initialForm = useMemo(() => {
-    if (isEditing) return routineEventToForm(initialEvent);
-
-    return {
-      owner: viewer,
-      title: "",
-      type: "busy",
-      days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
-      startTime: "09:00",
-      endTime: "10:00",
-    };
-  }, [initialEvent, isEditing, viewer]);
+  const initialForm = isEditing
+    ? routineEventToForm(initialEvent)
+    : {
+        owner: viewer,
+        title: "",
+        type: "busy",
+        days: ["monday", "tuesday", "wednesday", "thursday", "friday"],
+        startTime: "09:00",
+        endTime: "10:00",
+      };
 
   const [title, setTitle] = useState(initialForm.title);
   const [type, setType] = useState(initialForm.type);
@@ -46,15 +42,6 @@ export function RoutineEventComposer({
   const [startTime, setStartTime] = useState(initialForm.startTime);
   const [endTime, setEndTime] = useState(initialForm.endTime);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    setTitle(initialForm.title);
-    setType(initialForm.type);
-    setDays(initialForm.days);
-    setStartTime(initialForm.startTime);
-    setEndTime(initialForm.endTime);
-    setError("");
-  }, [initialForm, viewer]);
 
   function toggleDay(day) {
     setDays((currentDays) =>

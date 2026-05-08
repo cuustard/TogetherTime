@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { oneOffEventToForm, oneOffFormToEvent } from "../lib/events";
-import { getDateInputValue, prettyTimeZone } from "../lib/time";
+import { getDateInputValue } from "../lib/time";
 import { Card, CardContent } from "./Card";
 
 function isBlank(value) {
@@ -19,21 +19,17 @@ export function OneOffEventComposer({
   people,
 }) {
   const isEditing = mode === "edit" && initialEvent;
-  const viewerPerson = people[viewer];
-  const initialForm = useMemo(() => {
-    if (isEditing) return oneOffEventToForm(initialEvent, people);
-
-    const todayForViewer = getDateInputValue(now, viewerPerson.homeTimeZone);
-    return {
-      owner: viewer,
-      title: "",
-      type: "busy",
-      startDate: todayForViewer,
-      startTime: "18:00",
-      endDate: todayForViewer,
-      endTime: "19:00",
-    };
-  }, [initialEvent, isEditing, now, viewer, viewerPerson.homeTimeZone, people]);
+  const initialForm = isEditing
+    ? oneOffEventToForm(initialEvent, people)
+    : {
+        owner: viewer,
+        title: "",
+        type: "busy",
+        startDate: getDateInputValue(now, people[viewer].homeTimeZone),
+        startTime: "18:00",
+        endDate: getDateInputValue(now, people[viewer].homeTimeZone),
+        endTime: "19:00",
+      };
 
   const [title, setTitle] = useState(initialForm.title);
   const [type, setType] = useState(initialForm.type);
@@ -42,16 +38,6 @@ export function OneOffEventComposer({
   const [endDate, setEndDate] = useState(initialForm.endDate);
   const [endTime, setEndTime] = useState(initialForm.endTime);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    setTitle(initialForm.title);
-    setType(initialForm.type);
-    setStartDate(initialForm.startDate);
-    setStartTime(initialForm.startTime);
-    setEndDate(initialForm.endDate);
-    setEndTime(initialForm.endTime);
-    setError("");
-  }, [initialForm, viewer]);
 
   function handleSubmit(event) {
     event.preventDefault();

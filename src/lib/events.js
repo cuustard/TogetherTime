@@ -1,8 +1,22 @@
 import { STATUS_LABELS } from "../constants/availability";
-import { DAY_KEYS, HOUR_HEIGHT, MS_PER_DAY, MS_PER_HOUR, TIMELINE_DAYS_AFTER_TODAY, TIMELINE_DAYS_BEFORE_TODAY } from "../constants/timeline";
+import {
+  DAY_KEYS,
+  HOUR_HEIGHT,
+  MS_PER_DAY,
+  MS_PER_HOUR,
+  TIMELINE_DAYS_AFTER_TODAY,
+  TIMELINE_DAYS_BEFORE_TODAY,
+} from "../constants/timeline";
 import { PEOPLE } from "../data/people";
 import { ROUTINE_SCHEDULES } from "../data/routineSchedules";
-import { addDaysToDateParts, formatDayInZone, getDateInputValue, getPartsInTimeZone, minutesFromTime, zonedDateTimeToUtc } from "./time";
+import {
+  addDaysToDateParts,
+  formatDayInZone,
+  getDateInputValue,
+  getPartsInTimeZone,
+  minutesFromTime,
+  zonedDateTimeToUtc,
+} from "./time";
 
 export function addEventMetadata(personKey, event, index) {
   return {
@@ -69,7 +83,11 @@ function canMergeResolvedSegments(a, b) {
   );
 }
 
-export function resolveOverlappingIntervals(intervals, rangeStartUtc, rangeEndUtc) {
+export function resolveOverlappingIntervals(
+  intervals,
+  rangeStartUtc,
+  rangeEndUtc,
+) {
   const rangeStartMs = rangeStartUtc.getTime();
   const rangeEndMs = rangeEndUtc.getTime();
   const usableIntervals = intervals
@@ -141,8 +159,16 @@ function getDayKeyFromDateParts(parts) {
   return DAY_KEYS[date.getUTCDay()];
 }
 
-function recurringEventToUtcInterval(personKey, event, startDateParts, people = PEOPLE) {
-  const eventTimeZone = event.timezone || people[personKey]?.homeTimeZone || PEOPLE[personKey].homeTimeZone;
+function recurringEventToUtcInterval(
+  personKey,
+  event,
+  startDateParts,
+  people = PEOPLE,
+) {
+  const eventTimeZone =
+    event.timezone ||
+    people[personKey]?.homeTimeZone ||
+    PEOPLE[personKey].homeTimeZone;
   const startMinutes = minutesFromTime(event.start);
   const endMinutes = minutesFromTime(event.end);
   const endsNextDay = endMinutes <= startMinutes;
@@ -168,6 +194,26 @@ function recurringEventToUtcInterval(personKey, event, startDateParts, people = 
   );
 
   return { ...event, startUtc, endUtc };
+}
+
+function getResolvedScheduleIntervals(
+  personKey,
+  rangeStartUtc,
+  rangeEndUtc,
+  eventsByPerson = DEFAULT_EVENTS,
+  people = PEOPLE,
+) {
+  return resolveOverlappingIntervals(
+    generateScheduleIntervals(
+      personKey,
+      rangeStartUtc,
+      rangeEndUtc,
+      eventsByPerson,
+      people,
+    ),
+    rangeStartUtc,
+    rangeEndUtc,
+  );
 }
 
 export function getTimelineBounds(now, viewerTimeZone) {
@@ -204,7 +250,8 @@ export function generateScheduleIntervals(
   people = PEOPLE,
 ) {
   const personEvents = eventsByPerson[personKey] || [];
-  const personTimeZone = people[personKey]?.homeTimeZone || PEOPLE[personKey].homeTimeZone;
+  const personTimeZone =
+    people[personKey]?.homeTimeZone || PEOPLE[personKey].homeTimeZone;
   const startParts = getPartsInTimeZone(rangeStartUtc, personTimeZone);
   const totalDays =
     Math.ceil((rangeEndUtc.getTime() - rangeStartUtc.getTime()) / MS_PER_DAY) +
@@ -220,8 +267,16 @@ export function generateScheduleIntervals(
       .forEach((event) => {
         if (!event.days.includes(dayKey)) return;
 
-        const interval = recurringEventToUtcInterval(personKey, event, dateParts, people);
-        if (interval.endUtc > rangeStartUtc && interval.startUtc < rangeEndUtc) {
+        const interval = recurringEventToUtcInterval(
+          personKey,
+          event,
+          dateParts,
+          people,
+        );
+        if (
+          interval.endUtc > rangeStartUtc &&
+          interval.startUtc < rangeEndUtc
+        ) {
           intervals.push(interval);
         }
       });
@@ -253,16 +308,12 @@ export function buildVisibleBlocks(
   eventsByPerson = DEFAULT_EVENTS,
   people = PEOPLE,
 ) {
-  const intervals = resolveOverlappingIntervals(
-    generateScheduleIntervals(
-      personKey,
-      rangeStartUtc,
-      rangeEndUtc,
-      eventsByPerson,
-      people,
-    ),
+  const intervals = getResolvedScheduleIntervals(
+    personKey,
     rangeStartUtc,
     rangeEndUtc,
+    eventsByPerson,
+    people,
   );
   const rangeDuration = rangeEndUtc.getTime() - rangeStartUtc.getTime();
 
@@ -289,55 +340,100 @@ export function buildVisibleBlocks(
   });
 }
 
-export function getStatusAt(personKey, date, eventsByPerson = DEFAULT_EVENTS, people = PEOPLE) {
+export function getStatusAt(
+  personKey,
+  date,
+  eventsByPerson = DEFAULT_EVENTS,
+  people = PEOPLE,
+) {
   const rangeStartUtc = new Date(date.getTime() - MS_PER_DAY * 2);
   const rangeEndUtc = new Date(date.getTime() + MS_PER_DAY * 2);
-  const intervals = resolveOverlappingIntervals(
-    generateScheduleIntervals(
-      personKey,
-      rangeStartUtc,
-      rangeEndUtc,
-      eventsByPerson,
-      people,
-    ),
+  const intervals = getResolvedScheduleIntervals(
+    personKey,
     rangeStartUtc,
     rangeEndUtc,
+    eventsByPerson,
+    people,
   );
-  const event = intervals.find((item) => item.startUtc <= date && item.endUtc > date);
+  const event = intervals.find(
+    (item) => item.startUtc <= date && item.endUtc > date,
+  );
 
   return event || { type: "unknown", label: "Unknown" };
 }
 
-export function findOverlapWindows(rangeStartUtc, rangeEndUtc, now, eventsByPerson, people = PEOPLE) {
-  const stepMs = 15 * 60 * 1000;
-  const windows = [];
-  let current = null;
-  const start = Math.max(rangeStartUtc.getTime(), now.getTime() - stepMs);
+function isCallWindowStatus(interval) {
+  return ["free", "maybe"].includes(interval.type);
+}
 
-  for (let t = start; t < rangeEndUtc.getTime(); t += stepMs) {
-    const date = new Date(t);
-    const you = getStatusAt("you", date, eventsByPerson, people);
-    const partner = getStatusAt("partner", date, eventsByPerson, people);
-    const isGood =
-      ["free", "maybe"].includes(you.type) &&
-      ["free", "maybe"].includes(partner.type);
-    const isBest = you.type === "free" && partner.type === "free";
-
-    if (isGood) {
-      if (!current) {
-        current = { start: t, end: t + stepMs, best: isBest };
-      } else {
-        current.end = t + stepMs;
-        current.best = current.best || isBest;
-      }
-    } else if (current) {
-      if (current.end - current.start >= 30 * 60 * 1000) windows.push(current);
-      current = null;
-    }
+function mergeWindowCandidate(windows, window) {
+  const previous = windows[windows.length - 1];
+  if (
+    previous &&
+    previous.best === window.best &&
+    previous.end === window.start
+  ) {
+    previous.end = window.end;
+    return;
   }
 
-  if (current && current.end - current.start >= 30 * 60 * 1000) {
-    windows.push(current);
+  windows.push(window);
+}
+
+export function findOverlapWindows(
+  rangeStartUtc,
+  rangeEndUtc,
+  eventsByPerson,
+  people = PEOPLE,
+) {
+  const windows = [];
+  const youIntervals = getResolvedScheduleIntervals(
+    "you",
+    rangeStartUtc,
+    rangeEndUtc,
+    eventsByPerson,
+    people,
+  );
+  const partnerIntervals = getResolvedScheduleIntervals(
+    "partner",
+    rangeStartUtc,
+    rangeEndUtc,
+    eventsByPerson,
+    people,
+  );
+
+  let youIndex = 0;
+  let partnerIndex = 0;
+
+  while (
+    youIndex < youIntervals.length &&
+    partnerIndex < partnerIntervals.length
+  ) {
+    const you = youIntervals[youIndex];
+    const partner = partnerIntervals[partnerIndex];
+    const segmentStart = Math.max(
+      you.startUtc.getTime(),
+      partner.startUtc.getTime(),
+    );
+    const segmentEnd = Math.min(you.endUtc.getTime(), partner.endUtc.getTime());
+
+    if (segmentEnd > segmentStart) {
+      const isGood = isCallWindowStatus(you) && isCallWindowStatus(partner);
+      if (isGood) {
+        mergeWindowCandidate(windows, {
+          start: segmentStart,
+          end: segmentEnd,
+          best: you.type === "free" && partner.type === "free",
+        });
+      }
+    }
+
+    if (you.endUtc.getTime() <= partner.endUtc.getTime()) {
+      youIndex += 1;
+    }
+    if (partner.endUtc.getTime() <= you.endUtc.getTime()) {
+      partnerIndex += 1;
+    }
   }
 
   return windows.map((window) => ({
@@ -411,26 +507,34 @@ export function oneOffFormToEvent({
 }
 
 export function oneOffEventToForm(event, people = PEOPLE) {
-  const timezone = event.timezone || people[event.owner]?.homeTimeZone || PEOPLE[event.owner].homeTimeZone;
+  const timezone =
+    event.timezone ||
+    people[event.owner]?.homeTimeZone ||
+    PEOPLE[event.owner].homeTimeZone;
 
   return {
     owner: event.owner,
     title: event.title || event.label || "",
     type: event.type || "busy",
     startDate: getDateInputValue(new Date(event.startAt), timezone),
-    startTime: event.startAt ? event.startAt && new Intl.DateTimeFormat("en-GB", {
-      timeZone: timezone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).format(new Date(event.startAt)) : "18:00",
+    startTime: event.startAt
+      ? event.startAt &&
+        new Intl.DateTimeFormat("en-GB", {
+          timeZone: timezone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).format(new Date(event.startAt))
+      : "18:00",
     endDate: getDateInputValue(new Date(event.endAt), timezone),
-    endTime: event.endAt ? new Intl.DateTimeFormat("en-GB", {
-      timeZone: timezone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).format(new Date(event.endAt)) : "19:00",
+    endTime: event.endAt
+      ? new Intl.DateTimeFormat("en-GB", {
+          timeZone: timezone,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).format(new Date(event.endAt))
+      : "19:00",
   };
 }
 

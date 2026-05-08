@@ -31,7 +31,7 @@ export default function AuthScreen() {
   return (
     <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-8 text-slate-950">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center">
-        <section className="w-full rounded-[2rem] border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
+        <section className="w-full rounded-4xl border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
           <div className="flex items-center gap-2 text-sm font-semibold text-pink-700">
             <Heart className="h-4 w-4 fill-pink-200" />
             Together Time
@@ -65,7 +65,9 @@ export default function AuthScreen() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete={mode === "sign_up" ? "new-password" : "current-password"}
+                autoComplete={
+                  mode === "sign_up" ? "new-password" : "current-password"
+                }
                 minLength={6}
                 required
               />

@@ -81,12 +81,13 @@ export default function TogetherTimeApp() {
   const [timelineError, setTimelineError] = useState("");
   const [eventsLoading, setEventsLoading] = useState(false);
   const [eventsError, setEventsError] = useState("");
-  const [lastRefreshAt, setLastRefreshAt] = useState(null);
+  const [showRefreshCheck, setShowRefreshCheck] = useState(false);
   const [timelineMembers, setTimelineMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState("");
   const timelineScrollRef = useRef(null);
   const hasInitiallyScrolledRef = useRef(false);
+  const refreshCheckTimerRef = useRef(null);
 
   const viewer = "you";
   const viewerTimeZone = localTimeZone;
@@ -125,16 +126,22 @@ export default function TogetherTimeApp() {
     let isMounted = true;
 
     if (!session?.user?.id) {
-      setProfile(null);
-      setProfileLoading(false);
-      setProfileError("");
+      queueMicrotask(() => {
+        if (!isMounted) return;
+        setProfile(null);
+        setProfileLoading(false);
+        setProfileError("");
+      });
       return () => {
         isMounted = false;
       };
     }
 
-    setProfileLoading(true);
-    setProfileError("");
+    queueMicrotask(() => {
+      if (!isMounted) return;
+      setProfileLoading(true);
+      setProfileError("");
+    });
 
     fetchProfile(session.user.id)
       .then((nextProfile) => {
@@ -159,16 +166,22 @@ export default function TogetherTimeApp() {
     let isMounted = true;
 
     if (!session?.user?.id || !profile) {
-      setSharedTimeline(null);
-      setTimelineLoading(false);
-      setTimelineError("");
+      queueMicrotask(() => {
+        if (!isMounted) return;
+        setSharedTimeline(null);
+        setTimelineLoading(false);
+        setTimelineError("");
+      });
       return () => {
         isMounted = false;
       };
     }
 
-    setTimelineLoading(true);
-    setTimelineError("");
+    queueMicrotask(() => {
+      if (!isMounted) return;
+      setTimelineLoading(true);
+      setTimelineError("");
+    });
 
     fetchUserTimeline(session.user.id)
       .then((nextTimeline) => {
@@ -193,16 +206,22 @@ export default function TogetherTimeApp() {
     let isMounted = true;
 
     if (!sharedTimeline?.id) {
-      setTimelineMembers([]);
-      setMembersLoading(false);
-      setMembersError("");
+      queueMicrotask(() => {
+        if (!isMounted) return;
+        setTimelineMembers([]);
+        setMembersLoading(false);
+        setMembersError("");
+      });
       return () => {
         isMounted = false;
       };
     }
 
-    setMembersLoading(true);
-    setMembersError("");
+    queueMicrotask(() => {
+      if (!isMounted) return;
+      setMembersLoading(true);
+      setMembersError("");
+    });
 
     fetchTimelineMembers(sharedTimeline.id)
       .then((members) => {
@@ -232,16 +251,22 @@ export default function TogetherTimeApp() {
       membersLoading ||
       membersError
     ) {
-      setEventsByPerson(createEmptyEventsByPerson());
-      setEventsLoading(false);
-      setEventsError("");
+      queueMicrotask(() => {
+        if (!isMounted) return;
+        setEventsByPerson(createEmptyEventsByPerson());
+        setEventsLoading(false);
+        setEventsError("");
+      });
       return () => {
         isMounted = false;
       };
     }
 
-    setEventsLoading(true);
-    setEventsError("");
+    queueMicrotask(() => {
+      if (!isMounted) return;
+      setEventsLoading(true);
+      setEventsError("");
+    });
 
     fetchTimelineEvents({
       timelineId: sharedTimeline.id,
@@ -326,13 +351,29 @@ export default function TogetherTimeApp() {
       });
 
       setEventsByPerson(nextEvents);
-      setLastRefreshAt(new Date());
+      setShowRefreshCheck(true);
+      if (refreshCheckTimerRef.current) {
+        window.clearTimeout(refreshCheckTimerRef.current);
+      }
+      refreshCheckTimerRef.current = window.setTimeout(() => {
+        setShowRefreshCheck(false);
+        refreshCheckTimerRef.current = null;
+      }, 2000);
     } catch (error) {
       setEventsError(error.message || "Could not load shared events.");
     } finally {
       setEventsLoading(false);
     }
   }
+
+  useEffect(
+    () => () => {
+      if (refreshCheckTimerRef.current) {
+        window.clearTimeout(refreshCheckTimerRef.current);
+      }
+    },
+    [],
+  );
 
   async function addEvent(event) {
     if (event.owner !== viewer || !sharedTimeline?.id || !session?.user?.id)
@@ -468,19 +509,11 @@ export default function TogetherTimeApp() {
         ? findOverlapWindows(
             timeline.startUtc,
             timeline.endUtc,
-            now,
             eventsByPerson,
             people,
           )
         : [],
-    [
-      timeline.startUtc,
-      timeline.endUtc,
-      now,
-      eventsByPerson,
-      people,
-      hasPartner,
-    ],
+    [timeline.startUtc, timeline.endUtc, eventsByPerson, people, hasPartner],
   );
 
   const nextWindows = overlapWindows
@@ -586,7 +619,7 @@ export default function TogetherTimeApp() {
     return (
       <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-8 text-slate-950">
         <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center">
-          <section className="w-full rounded-[2rem] border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
+          <section className="w-full rounded-4xl border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
             <div className="flex items-center gap-2 text-sm font-semibold text-pink-700">
               <Heart className="h-4 w-4 fill-pink-200" />
               Together Time
@@ -635,7 +668,7 @@ export default function TogetherTimeApp() {
     return (
       <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-8 text-slate-950">
         <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center">
-          <section className="w-full rounded-[2rem] border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
+          <section className="w-full rounded-4xl border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
             <div className="flex items-center gap-2 text-sm font-semibold text-pink-700">
               <Heart className="h-4 w-4 fill-pink-200" />
               Together Time
@@ -690,7 +723,7 @@ export default function TogetherTimeApp() {
     return (
       <main className="min-h-screen bg-linear-to-b from-pink-50 via-white to-slate-100 px-4 py-8 text-slate-950">
         <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md items-center">
-          <section className="w-full rounded-[2rem] border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
+          <section className="w-full rounded-4xl border border-white/80 bg-white/85 p-6 shadow-xl shadow-pink-100/70 backdrop-blur">
             <div className="flex items-center gap-2 text-sm font-semibold text-pink-700">
               <Heart className="h-4 w-4 fill-pink-200" />
               Together Time
@@ -900,7 +933,7 @@ export default function TogetherTimeApp() {
             hasPartner={hasPartner}
             onRefreshSharedEvents={refreshSharedEvents}
             refreshDisabled={eventsLoading}
-            lastRefreshAt={lastRefreshAt}
+            showRefreshCheck={showRefreshCheck}
           />
         </div>
 

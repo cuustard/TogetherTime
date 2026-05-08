@@ -1,5 +1,4 @@
-import { Check, Clock, RefreshCcw, Moon, Sun, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, Clock, RefreshCcw } from "lucide-react";
 import { formatTimeInZone } from "../lib/time";
 import { MemoTimelineBlock } from "./TimelineBlock";
 
@@ -62,20 +61,8 @@ export function Timeline({
   hasPartner,
   onRefreshSharedEvents,
   refreshDisabled,
-  lastRefreshAt,
+  showRefreshCheck,
 }) {
-  const [showRefreshCheck, setShowRefreshCheck] = useState(false);
-
-  useEffect(() => {
-    if (lastRefreshAt) {
-      setShowRefreshCheck(true);
-      const timer = setTimeout(() => {
-        setShowRefreshCheck(false);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [lastRefreshAt]);
-
   return (
     <section className="space-y-3 pb-10">
       <div className="flex items-center justify-between gap-3 px-1">
